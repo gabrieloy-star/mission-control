@@ -1,0 +1,11 @@
+name: Idea
+description: Something Usage Coach could show or do
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you would like to see, and what it would save you (time, tokens, money).
+    validations:
+      required: true

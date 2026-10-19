@@ -1,0 +1,23 @@
+name: Bug report
+description: Something in the strip, the pane or a notice is wrong or broken
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead. A screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to see it again
+      placeholder: "1. Open a new session\n2. …"
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Claude Code version (`claude --version`), plugin version, and where you use it (terminal, desktop, VS Code).
+    validations:
+      required: true
