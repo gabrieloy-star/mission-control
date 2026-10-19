@@ -207,7 +207,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     const state = cacheState(left, warn)
     const value = span(left)
     parts.push({
-      key: 'idleTimer', rank: 3, cells: (desktop ? cellsOf(52) : 7) + 1 + value.length,
+      key: 'cache', rank: 3, cells: (desktop ? cellsOf(52) : 7) + 1 + value.length,
       tip: tipText({
         name: 'Prompt cache', now: left > 0 ? `valid until ${clockOf(cacheEnd(live)!)}` : 'expired', tone: state as Tone,
         what: left > 0
@@ -339,7 +339,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     const shorter = parts.map(p => (p.key === 'suggestion' ? { ...p, cells: suggestionCells(short), draw: drawSuggestion(short) } : p))
     kept = fit(shorter)
   }
-  const order = ['context', 'idleTimer', 'limit-five_hour', 'limit-seven_day', 'spend', 'suggestion', 'insights', 'open']
+  const order = ['context', 'cache', 'limit-five_hour', 'limit-seven_day', 'spend', 'suggestion', 'insights', 'open']
   kept.sort((a, b) => (order.indexOf(a.key) + 99) % 99 - (order.indexOf(b.key) + 99) % 99)
 
   const line = Box({

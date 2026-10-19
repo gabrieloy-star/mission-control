@@ -124,7 +124,7 @@ test('the details card shows both usage limits with reset times and the week of 
 test('the strip keeps the most important parts that fit, on one line', () => {
   for (const desktop of [false, true]) {
     const wide = partsAt(160, desktop)
-    expect(wide).toEqual(['context', 'idleTimer', 'limit-five_hour', 'limit-seven_day', 'spend', 'suggestion', 'insights', 'open'])
+    expect(wide).toEqual(['context', 'cache', 'limit-five_hour', 'limit-seven_day', 'spend', 'suggestion', 'insights', 'open'])
     const narrow = partsAt(60, desktop)
     expect(narrow[0]).toBe('context')
     expect(narrow).toContain('suggestion')
