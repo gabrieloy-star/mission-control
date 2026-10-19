@@ -16,9 +16,9 @@ import { compactUsd, readUsd, rewriteUsd, sumTokens, tokensUsd } from './prices'
 import { SAVINGS_KEY, limitName, loopStep, paceOf, paceWords, promptLine, recordSaving, sampleLimit, savedThisWeek, stepOf, todayUsd } from './signals'
 import { drawStrip } from './strip'
 import { drawPane } from './pane'
-import { stopIdle, startIdle, newIdleTimer } from './idle'
+import { SHORTEST_CACHE, WARN_BEFORE, idleInstructions, newIdleTimer } from './idle'
 import { insightsOf } from './insights'
-import type { IdleOptions } from './idle'
+import type { IdleOptions, IdleTimer } from './idle'
 
 const PLUGIN = 'usage-coach'
 const PANE = 'usage-coach'
@@ -281,6 +281,74 @@ function idleAtOf(l: Live): number | null {
   const end = cacheEnd(l)
   if (settings.leadMs <= 0 || end === null || ttlOf(l) < 30 * MINUTE || conversationOf(l) < settings.minTokens) return null
   return end - settings.leadMs
+}
+
+// ---------- Idle compact ----------
+
+function stopIdle($: EngineInterface, f: IdleTimer) {
+  f.generation++
+  for (const t of f.timers) t.cancel()
+  f.timers = []
+  if (f.hasStatus) $.ui.status(undefined)
+  f.hasStatus = false
+}
+
+/** Runs one compaction now; resolves false when there was nothing worth compacting or a turn was running. */
+async function compactNow($: EngineInterface, o: IdleOptions, why: string): Promise<boolean> {
+  const before = await o.conversation()
+  if (before === null || before < Math.min(o.minTokens, 5_000)) return false
+  try {
+    const result = await $.session.compact({ instructions: why })
+    if (!result.messages) return false
+    await o.onCompacted(result.tokensBefore ?? before, result.tokensAfter)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Sets the timer at the end of a main-loop turn. */
+async function startIdle($: EngineInterface, f: IdleTimer, o: IdleOptions) {
+  stopIdle($, f)
+  if (o.leadMs <= 0) return
+  const cache = await o.cache()
+  if (!cache || cache.ttl < SHORTEST_CACHE) return
+  const lit = f.generation
+  const now = await $.clock.now()
+  const fireAt = cache.end - o.leadMs
+  if (fireAt <= now) return
+
+  f.timers.push($.clock.after(Math.max(0, fireAt - WARN_BEFORE - now), async () => {
+    if (lit !== f.generation) return
+    const conv = await o.conversation().catch(() => null)
+    if (conv === null || conv < o.minTokens) return
+    $.ui.status(`◆ Usage Coach compacts at ${clockOf(fireAt)} unless you send a message · the cache expires at ${clockOf(cache.end)} · ${tok(conv)} tokens of conversation`)
+    f.hasStatus = true
+  }))
+
+  f.timers.push($.clock.after(fireAt - now, async () => {
+    if (lit !== f.generation) return
+    const at = await $.clock.now()
+    // A timer that fires late (the Mac slept) finds the cache expired: compacting then saves nothing.
+    if (at >= cache.end) {
+      $.ui.log(`◆ Usage Coach did not compact: the cache expired at ${clockOf(cache.end)} while the Mac was asleep`)
+      stopIdle($, f)
+      return
+    }
+    const conv = await o.conversation().catch(() => null)
+    if (conv === null || conv < o.minTokens) {
+      stopIdle($, f)
+      return
+    }
+    const done = await compactNow($, o, idleInstructions(clockOf(at), clockOf(cache.end)))
+    if (lit !== f.generation) return
+    if (done) {
+      $.ui.status(`◆ Usage Coach compacted at ${clockOf(at)}, before the cache expired · ${tok(conv)} tokens of conversation`)
+      f.hasStatus = true
+    } else {
+      stopIdle($, f)
+    }
+  }))
 }
 
 // ---------- Hooks ----------
