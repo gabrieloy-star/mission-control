@@ -9,10 +9,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Category, Live, Tab, Tokens, Turn, Week, Weight } from '../types'
-import { CACHE_TTL, HOUR, MINUTE, cacheEnd, conversationOf, money, movesOf, seconds, tipOf, tok, ttlOf } from './moves'
+import type { Category, Live, Saving, SavingRun, Tab, Tokens, Turn, Week, Weight } from '../types'
+import { CACHE_TTL, HOUR, LOOP_AT, MINUTE, cacheEnd, clockOf, conversationOf, money, movesOf, seconds, span, tipOf, tok, ttlOf } from './moves'
 import type { Settings } from './moves'
-import { sumTokens, tokensUsd } from './prices'
+import { compactUsd, readUsd, rewriteUsd, sumTokens, tokensUsd } from './prices'
+import { SAVINGS_KEY, limitName, loopStep, paceOf, promptLine, recordSaving, sampleLimit, savedThisWeek, stepOf, todayUsd } from './signals'
 import { drawStrip } from './strip'
 import { drawPane } from './pane'
 import { defuse, light, newFuse } from './idle'
@@ -23,6 +24,7 @@ const PLUGIN = 'usage-coach'
 const PANE = 'usage-coach'
 const PANE_COLUMNS = 56
 const WEEK_KEY = 'week'
+const WELCOMED_KEY = 'welcomed'
 const WEEK_FRESH = 2 * HOUR
 const TOAST_GAP = 10 * MINUTE
 const KEEP_TURNS = 60
@@ -39,6 +41,8 @@ const tab = atom({ plugin: 'usage-coach', key: 'tab' } as const, 'moves' as Tab)
 const week = atom({ plugin: 'usage-coach', key: 'week' } as const, null as Week | null)
 const weekBusy = atom({ plugin: 'usage-coach', key: 'weekBusy' } as const, false)
 const categories = atom({ plugin: 'usage-coach', key: 'categories' } as const, [] as Category[])
+const saved = atom({ plugin: 'usage-coach', key: 'saved' } as const, { usd: 0, count: 0 })
+const isWelcome = atom({ plugin: 'usage-coach', key: 'isWelcome' } as const, false)
 
 /** The window compaction is measured against (a smaller compaction window when one is set). */
 let effectiveWindow: number | null = null
@@ -51,9 +55,14 @@ let turnAgentUsd = 0
 let turnCold = false
 let turnOut = 0
 let turnTools = 0
+let turnRequests = 0
+/** Your request that started the turn: "" when Claude continued without one. */
+let turnPrompt = ''
 /** A main-loop turn is running: a compaction now would be refused, so the strip queues one. */
 let isTurnRunning = false
 let isCompactQueued = false
+/** The next compaction is the one the strip or the pane asked for: its saving is counted. */
+let isOwnCompact = false
 let firstStep = true
 let ticker: { cancel(): void } | null = null
 const fuse = newFuse()
@@ -127,6 +136,7 @@ async function compactFromStrip($: EngineInterface) {
   const conv = conversationOf(await read($, live))
   if (conv > 0 && conv < 5_000) return $.ui.toast(`Usage Coach: only ${tok(conv)} tokens of conversation, nothing worth compacting yet`)
   isCompactQueued = true
+  isOwnCompact = true
   $.ui.invalidate('ui.render')
   $.ui.toast(isTurnRunning
     ? 'Usage Coach: compaction queued, it runs as soon as Claude finishes this answer'
@@ -135,6 +145,7 @@ async function compactFromStrip($: EngineInterface) {
     .catch(() => $.ui.toast('Usage Coach: the compaction did not run. Type /compact'))
     .finally(() => {
       isCompactQueued = false
+      isOwnCompact = false
       $.ui.invalidate('ui.render')
     })
 }
@@ -176,9 +187,10 @@ async function readWeek($: EngineInterface, force = false) {
     const script = `${$.plugin.root}/scripts/week.mjs`
     for (const node of NODES) {
       try {
-        const run = await $.process.run([node, script, '--days', '7'], { timeoutMs: 180_000 })
+        const usdAtScan = (await read($, live)).usd
+        const run = await $.process.run([node, script, '--days', '7', '--prev'], { timeoutMs: 180_000 })
         if (run.exitCode !== 0 || run.isStdoutTruncated) continue
-        const next: Week = { ...JSON.parse(run.stdout), at: await $.clock.now() }
+        const next: Week = { ...JSON.parse(run.stdout), at: await $.clock.now(), ...(usdAtScan !== null ? { sessionUsdAtScan: usdAtScan } : {}) }
         await update($, week, () => next)
         await $.store.set(WEEK_KEY, next)
         return
@@ -198,6 +210,30 @@ async function toastOnce($: EngineInterface, text: string) {
   if (now - l.lastToastAt < TOAST_GAP) return
   await update($, live, x => ({ ...x, lastToastAt: now }))
   $.ui.toast(text)
+}
+
+// ---------- Savings ----------
+
+/** Writes one saving to the 7-day ledger and refreshes the total the pane shows. */
+async function keepSaving($: EngineInterface, entry: Saving) {
+  const now = await $.clock.now()
+  const list = recordSaving((await $.store.get(SAVINGS_KEY)) as Saving[] | null, entry, now)
+  await $.store.set(SAVINGS_KEY, list)
+  await update($, saved, () => savedThisWeek(list, now))
+}
+
+/** At the end of each turn: what the compaction being counted saved so far. */
+async function countSaving($: EngineInterface, run: SavingRun, turnStartedAt: number, requests: number) {
+  const now = await $.clock.now()
+  if (run.kind === 'idle') {
+    // Counted once, on the return: only a return after the cache would have expired saved anything.
+    await update($, live, x => ({ ...x, savingRun: null }))
+    if (run.expiresAt !== undefined && turnStartedAt >= run.expiresAt && run.usd > 0) await keepSaving($, { id: run.id, at: now, kind: 'idle', usd: run.usd })
+    return
+  }
+  const next = { ...run, usd: run.usd + run.perRequest * requests }
+  await update($, live, x => ({ ...x, savingRun: next }))
+  await keepSaving($, { id: run.id, at: now, kind: 'button', usd: next.usd })
 }
 
 // ---------- Weights ----------
@@ -254,7 +290,16 @@ function fuseFor($: EngineInterface): FuseOptions {
       const end = cacheEnd(l)
       return end === null ? null : { end, ttl: ttlOf(l) }
     },
-    onCompacted: async () => $.ui.invalidate('ui.render'),
+    onCompacted: async before => {
+      // Saved once you come back after the cache would have expired: the resend it avoided, less the compaction.
+      const l = await read($, live)
+      const at = await $.clock.now()
+      const model = l.model
+      const usd = rewriteUsd(before, model) - compactUsd(before, model)
+      const end = cacheEnd(l)
+      await update($, live, x => ({ ...x, savingRun: { id: 'idle-' + at, kind: 'idle' as const, usd, perRequest: 0, expiresAt: end ?? at } }))
+      $.ui.invalidate('ui.render')
+    },
   }
 }
 
@@ -273,6 +318,13 @@ export const register: Register = (on, options) => {
       await readBreakdown($)
       const kept = (await $.store.get(WEEK_KEY)) as Week | null
       if (kept && Number.isFinite(kept.at)) await update($, week, () => kept)
+      const now = await $.clock.now()
+      void (async () => {
+        const list = (await $.store.get(SAVINGS_KEY)) as Saving[] | null
+        await update($, saved, () => savedThisWeek(list, now))
+        if (!(await $.store.get(WELCOMED_KEY))) await update($, isWelcome, () => true)
+        $.ui.invalidate('ui.render')
+      })().catch(() => {})
       // The details card shows the week's Fable use: refresh a stale week in the background (local, no tokens).
       void readWeek($).catch(() => {})
     } catch {
@@ -300,8 +352,11 @@ export const register: Register = (on, options) => {
       turnCold = false
       turnOut = 0
       turnTools = 0
+      turnRequests = 0
+      turnPrompt = e.text ?? ''
       firstStep = true
-      await update($, live, x => ({ ...x, turnBase: x.usd }))
+      // A new request of yours is the hint a failing loop needed: the count starts over.
+      await update($, live, x => ({ ...x, turnBase: x.usd, loop: turnPrompt ? null : x.loop }))
     }
     return next(e)
   })
@@ -319,6 +374,7 @@ export const register: Register = (on, options) => {
         turnRead += read
         turnInput += read + write + (u.input_tokens ?? 0)
         turnOut += u.output_tokens ?? 0
+        turnRequests++
         if (firstStep && write > 50_000 && read < write) turnCold = true
         // Which cache this request wrote: the 1-hour one, or the 5-minute one (as when usage runs over).
         const w5 = u.cache_creation?.ephemeral_5m_input_tokens ?? 0
@@ -341,6 +397,17 @@ export const register: Register = (on, options) => {
         if (!l.mcpUsed.includes(server)) await update($, live, x => ({ ...x, mcpUsed: [...x.mcpUsed, server] }))
       }
       if (!(e as any).agentId) turnTools++
+      if (!(e as any).agentId && ran && ran.deny === undefined) {
+        const l = await read($, live)
+        const loop = loopStep(l.loop, stepOf(e.tool, (e as any).input), ran.isError === true, l.usd ?? 0)
+        const isNew = loop && loop.count >= LOOP_AT && !loop.isTold
+        if (loop !== l.loop) await update($, live, x => ({ ...x, loop: isNew ? { ...loop!, isTold: true } : loop }))
+        if (isNew) {
+          const spent = l.usd !== null ? Math.max(0, l.usd - loop!.usdAtFirst) : 0
+          $.ui.toast(`Usage Coach: Claude failed the same step ${loop!.count} times${spent >= 0.01 ? ` (${money(spent)} since the first failure)` : ''}. Press Esc and say what to try instead`)
+          $.ui.invalidate('ui.render')
+        }
+      }
       if (!(e as any).agentId && ran && ran.result !== undefined) {
         const w = weightOf(e.tool_use_id, e.tool, (e as any).input, ran.result)
         if (w) {
@@ -373,8 +440,16 @@ export const register: Register = (on, options) => {
         out: turnOut,
         tools: turnTools,
         model: l.model,
+        requests: turnRequests,
+        ...(turnPrompt.trim() ? { prompt: promptLine(turnPrompt) } : {}),
       }
-      await update($, live, x => ({ ...x, turns: [...x.turns, turn].slice(-KEEP_TURNS), adds: [...x.adds, added].slice(-12) }))
+      await update($, live, x => ({
+        ...x,
+        turns: [...x.turns, turn].slice(-KEEP_TURNS),
+        adds: [...x.adds, added].slice(-12),
+        limitSamples: Object.fromEntries(x.limits.map(lim => [lim.kind, sampleLimit(x.limitSamples?.[lim.kind], now, lim.percentUsed)])),
+      }))
+      if (l.savingRun) await countSaving($, l.savingRun, now - e.durationMs, turnRequests)
 
       // The ledger line, when turned on: a dim transcript row, never sent to the model.
       if (s.telemetry && usd >= 0.01) {
@@ -392,10 +467,18 @@ export const register: Register = (on, options) => {
           $.ui.toast(`Usage Coach: this session has cost ${money(after.usd)}, over your ${money(s.budget)} budget`)
         }
       }
+      // A usage limit that runs out before it resets: said once per window.
+      for (const lim of after.limits) {
+        const pace = paceOf(lim, after.limitSamples?.[lim.kind], now)
+        const key = `${lim.kind}@${lim.resetsAt ?? ''}`
+        if (!pace?.isShort || after.toldPace?.includes(key)) continue
+        await update($, live, x => ({ ...x, toldPace: [...(x.toldPace ?? []), key].slice(-6) }))
+        $.ui.toast(`Usage Coach: at this pace the ${limitName(lim.kind)} runs out at ${clockOf(pace.runsOutAt)}, ${span(pace.resetsAt! - pace.runsOutAt)} before it resets`)
+      }
       const top = movesOf(after, now, s)[0]
       if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Usage Coach: ${tipOf(top)}`)
       // A model that does not fit the work is said once per session; the rest waits in Insights.
-      const fit = insightsOf(after, await read($, week)).find(i => i.kind === 'model' && i.tone !== 'calm' && !toldInsights.has(i.id))
+      const fit = insightsOf(after, await read($, week), now).find(i => i.kind === 'model' && i.tone !== 'calm' && !toldInsights.has(i.id))
       if (fit) {
         toldInsights.add(fit.id)
         await toastOnce($, `Usage Coach insight: ${fit.title} · press i`)
@@ -422,7 +505,16 @@ export const register: Register = (on, options) => {
   on('session.compact', async ($, e, next) => {
     const result = await next(e)
     if (e.agentId || e.trigger === 'precompute' || !result.messages) return result
+    const isOwn = isOwnCompact
+    isOwnCompact = false
     try {
+      // The strip's compaction saves on every later request; any other compaction ends the count.
+      const l = await read($, live)
+      const before = result.tokensBefore ?? conversationOf(l)
+      const run: SavingRun | null = isOwn && result.tokensAfter !== undefined && before > result.tokensAfter
+        ? { id: 'button-' + (await $.clock.now()), kind: 'button', usd: -compactUsd(before, l.model), perRequest: readUsd(before - result.tokensAfter, l.model) }
+        : null
+      await update($, live, x => ({ ...x, savingRun: run }))
       await update($, live, x => ({
         ...x,
         tokens: result.tokensAfter && x.fixed !== null ? x.fixed + result.tokensAfter : x.tokens,
@@ -442,7 +534,7 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     defuse($, fuse)
     if (e.reason === 'clear') {
-      await update($, live, x => ({ ...EMPTY, limits: x.limits, mcp: x.mcp }))
+      await update($, live, x => ({ ...EMPTY, limits: x.limits, mcp: x.mcp, limitSamples: x.limitSamples, toldPace: x.toldPace }))
       turnStartTokens = null
     }
     if (e.reason === 'prompt_input_exit' || e.reason === 'other') ticker?.cancel()
@@ -460,7 +552,7 @@ export const register: Register = (on, options) => {
       live: l,
       week: await read($, week),
       move: movesOf(l, now, s)[0],
-      insights: insightsOf(l, await read($, week)).length,
+      insights: insightsOf(l, await read($, week), now).length,
       now,
       columns: Math.max(20, e.props.bodyColumns),
       desktop: e.surface === 'desktop',
@@ -468,6 +560,11 @@ export const register: Register = (on, options) => {
       isQueued: isCompactQueued,
       onOpen: () => void togglePane($),
       onInsights: () => void openInsights($),
+      isWelcome: await read($, isWelcome),
+      onWelcomeDone: () => void (async () => {
+        await $.store.set(WELCOMED_KEY, true)
+        await update($, isWelcome, () => false)
+      })(),
     })
     const below = await next(e)
     if (!strip) return below
@@ -481,9 +578,11 @@ export const register: Register = (on, options) => {
       tab: await read($, tab),
       live: l,
       moves: movesOf(l, now, s),
-      insights: insightsOf(l, await read($, week)),
+      insights: insightsOf(l, await read($, week), now),
       categories: await read($, categories),
       week: await read($, week),
+      saved: await read($, saved),
+      today: todayUsd(await read($, week), l.usd),
       weekBusy: await read($, weekBusy),
       columns: e.props.bodyColumns,
       now,

@@ -7,6 +7,7 @@ import { drawStrip, familyWeek, statusCard } from '../hooks/strip'
 import { drawPane } from '../hooks/pane'
 import { summarize } from '../hooks/week'
 import { insightsOf, modelName } from '../hooks/insights'
+import { loopStep, paceOf, promptLine, recordSaving, sampleLimit, savedThisWeek, stepOf, tasksOf, todayUsd, trendOf } from '../hooks/signals'
 
 const NOW = Date.parse('2026-10-18T15:00:00Z')
 const SETTINGS = { minTokens: 40_000, budget: 100, minSaving: 1 }
@@ -155,7 +156,7 @@ test('every pane tab draws on both surfaces without throwing', () => {
     agentTypes: { 'general-purpose': { runs: 30, tokens: 9e8 } }, cold: { count: 12, byModel: { 'claude-opus-5-5': 2_400_000 } }, projects: [{ name: 'shop', tokens: 1e9 }] }
   for (const desktop of [false, true]) {
     for (const tab of ['moves', 'tank', 'session', 'week', 'insights'] as const) {
-      const tree: any = drawPane(el, { tab, live: l, moves: movesOf(l, NOW, SETTINGS), insights: insightsOf(l, wk), categories: [{ name: 'Messages', tokens: 140_000 }, { name: 'System prompt', tokens: 12_000 }],
+      const tree: any = drawPane(el, { tab, live: l, moves: movesOf(l, NOW, SETTINGS), insights: insightsOf(l, wk, NOW), categories: [{ name: 'Messages', tokens: 140_000 }, { name: 'System prompt', tokens: 12_000 }],
         week: wk, weekBusy: false, columns: 56, now: NOW, desktop }, { setTab() {}, compact() {}, readWeek() {} })
       expect(tree.type).toBe('Box')
       expect(JSON.stringify(tree)).not.toContain('"plain":false')
@@ -167,7 +168,7 @@ test('every pane tab draws on both surfaces without throwing', () => {
 test('Fable on routine work points to Opus, and says what switching costs', () => {
   const turn = { at: NOW, ms: 20_000, added: 2_000, usd: 0.4, cached: 0.97, agentShare: 0, isCold: false, out: 900, tools: 1, model: 'claude-fable-5-1' }
   const l = live({ model: 'claude-fable-5-1', turns: [turn, turn, turn, turn, turn] })
-  const fit = insightsOf(l, null).find(i => i.id === 'model-fable')!
+  const fit = insightsOf(l, null, NOW).find(i => i.id === 'model-fable')!
   expect(fit.title).toBe('Fable 5.1 may be more than this work needs')
   expect(fit.how).toContain('/model opus')
   expect(fit.how).toContain('switching mid-task')
@@ -177,7 +178,7 @@ test('Fable on routine work points to Opus, and says what switching costs', () =
 test('hard work on a top model raises no model insight', () => {
   const turn = { at: NOW, ms: 300_000, added: 20_000, usd: 3, cached: 0.97, agentShare: 0, isCold: false, out: 12_000, tools: 25, model: 'claude-fable-5-1' }
   const l = live({ model: 'claude-fable-5-1', turns: [turn, turn, turn, turn, turn] })
-  expect(insightsOf(l, null).filter(i => i.kind === 'model')).toEqual([])
+  expect(insightsOf(l, null, NOW).filter(i => i.kind === 'model')).toEqual([])
 })
 
 test('a queued compaction shows on the strip until it runs', () => {
@@ -185,4 +186,139 @@ test('a queued compaction shows on the strip until it runs', () => {
   const tree: any = drawStrip(el, { live: l, week: null, move: movesOf(l, NOW, SETTINGS)[0], insights: 0, now: NOW, columns: 160, desktop: false, isQueued: true, onMove() {}, onOpen() {}, onInsights() {} })
   expect(JSON.stringify(tree)).toContain('compaction queued')
   expect(JSON.stringify(tree)).toContain('"label":"details"')
+})
+
+// ---------- Round 2: limit forecast, failing loop, tasks, savings, week over week ----------
+
+const five = (pct: number, resetIn = 3 * HOUR) => ({ kind: 'five_hour', percentUsed: pct, resetsAt: new Date(NOW + resetIn).toISOString() })
+
+test('a steady climb forecasts when the 5-hour limit runs out', () => {
+  // 40% → 60% over 40 minutes: 30% an hour, so the last 40% lasts 80 minutes.
+  const samples = [{ at: NOW - 40 * MINUTE, pct: 40 }, { at: NOW - 20 * MINUTE, pct: 50 }, { at: NOW, pct: 60 }]
+  const pace = paceOf(five(60), samples, NOW)!
+  expect(pace.runsOutAt).toBe(NOW + 80 * MINUTE)
+  expect(pace.isShort).toBe(true)
+  expect(pace.tone).toBe('hot')
+  expect(Math.round(pace.perHour)).toBe(30)
+  // Flat, or running out only after the reset: no warning.
+  expect(paceOf(five(60), samples.map(x => ({ ...x, pct: 60 })), NOW)).toBe(null)
+  expect(paceOf(five(60, HOUR), samples, NOW)!.isShort).toBe(false)
+  // Too few readings, or too short a stretch, say nothing.
+  expect(paceOf(five(60), samples.slice(1), NOW)).toBe(null)
+  // A drop means the window reset: the samples start over.
+  expect(sampleLimit(samples, NOW + MINUTE, 3)).toEqual([{ at: NOW + MINUTE, pct: 3 }])
+})
+
+test('the forecast reaches insights, the tooltip and the details card', () => {
+  const samples = [{ at: NOW - 40 * MINUTE, pct: 40 }, { at: NOW - 20 * MINUTE, pct: 50 }, { at: NOW, pct: 60 }]
+  const l = live({ limits: [five(60)], limitSamples: { five_hour: samples } })
+  const pace = insightsOf(l, null, NOW).find(i => i.id === 'limit-five_hour')!
+  expect(pace.kind).toBe('now')
+  expect(pace.title).toContain('5-hour limit runs out at')
+  const input = { live: l, week: null, move: undefined, insights: 1, now: NOW, columns: 200, desktop: true, onMove() {}, onOpen() {}, onInsights() {} }
+  expect(JSON.stringify(drawStrip(el, input))).toContain('At this pace it runs out at')
+  expect(statusCard(input).rows.some(r => r.label.includes('at this pace it runs out at'))).toBe(true)
+})
+
+test('three failures in a row on the same step raise the flag', () => {
+  const step = stepOf('Bash', { command: 'npm test -- --grep 12' })
+  let loop = loopStep(null, step, true, 5)
+  loop = loopStep(loop, stepOf('Bash', { command: 'npm test -- --grep 13' }), true, 5.5)
+  loop = loopStep(loop, step, true, 6)
+  expect(loop!.count).toBe(3)
+  expect(loop!.usdAtFirst).toBe(5)
+  // A success, or another step, starts it over.
+  expect(loopStep(loop, step, false, 6)).toBe(null)
+  expect(loopStep(loop, stepOf('Edit', { file_path: '/a/b/c.ts' }), true, 6)!.count).toBe(1)
+  const l = live({ usd: 7.4, loop: { ...loop!, isTold: true } })
+  const moves = movesOf(l, NOW, SETTINGS)
+  expect(moves[0]!.id).toBe('loop')
+  expect(moves[0]!.title).toBe('Claude failed the same step 3 times ($2.40)')
+  expect(insightsOf(l, null, NOW).some(i => i.id === 'loop')).toBe(true)
+})
+
+test('messages group into tasks by your request', () => {
+  const base = { added: 0, cached: 1, isCold: false, agentShare: 0 }
+  const tasks = tasksOf([
+    { ...base, at: NOW - 50 * MINUTE, ms: MINUTE, usd: 1, tools: 4, prompt: 'fix the login redirect' },
+    { ...base, at: NOW - 40 * MINUTE, ms: MINUTE, usd: 2, tools: 6, isCold: true },
+    { ...base, at: NOW - 10 * MINUTE, ms: MINUTE, usd: 0.5, tools: 1, prompt: 'add a test' },
+  ])
+  expect(tasks.length).toBe(2)
+  expect(tasks[0]).toEqual({ prompt: 'fix the login redirect', at: NOW - 51 * MINUTE, usd: 3, tools: 10, messages: 2, isCold: true, agentShare: 0 })
+  expect(promptLine('a\n  b ' + 'x'.repeat(80)).length).toBe(60)
+  expect(promptLine('a\n  b')).toBe('a b')
+})
+
+test('the savings ledger keeps 7 days and replaces entries by id', () => {
+  let list = recordSaving(null, { id: 'b1', at: NOW - 8 * 24 * HOUR, kind: 'button', usd: 9 }, NOW - 8 * 24 * HOUR)
+  list = recordSaving(list, { id: 'b2', at: NOW, kind: 'button', usd: 1 }, NOW)
+  list = recordSaving(list, { id: 'b2', at: NOW, kind: 'button', usd: 2.5 }, NOW)
+  list = recordSaving(list, { id: 'i1', at: NOW, kind: 'idle', usd: 3 }, NOW)
+  expect(list.map(x => x.id)).toEqual(['b2', 'i1'])
+  expect(savedThisWeek(list, NOW)).toEqual({ usd: 5.5, count: 2 })
+})
+
+const tk = (input: number) => ({ input, output: 0, read: 0, write5m: 0, write1h: 0 })
+const weekOf = (over: any = {}) => ({ at: NOW, since: '7d', sessions: 1, requests: 1, main: {}, sub: {}, agentTypes: {}, cold: { count: 0, byModel: {} }, projects: [], ...over })
+
+test('the week against the one before names the project behind the change', () => {
+  // Opus 5.5 input is $4 per million: $40 this week against $25 before.
+  const w = weekOf({
+    main: { 'claude-opus-5-5': tk(10e6) }, prev: { main: { 'claude-opus-5-5': tk(6.25e6) }, sub: {} },
+    byProject: { shop: { cur: { 'claude-opus-5-5': tk(8e6) }, prev: { 'claude-opus-5-5': tk(4e6) } }, blog: { cur: { 'claude-opus-5-5': tk(2e6) }, prev: { 'claude-opus-5-5': tk(2.25e6) } } },
+  })
+  const t = trendOf(w)!
+  expect(Math.round(t.change * 100)).toBe(60)
+  expect(t.project).toBe('shop')
+  expect(Math.round(t.projectShare * 100)).toBe(100)
+  expect(insightsOf(live(), w, NOW).find(i => i.id === 'week-trend')!.title).toBe('You spent 60% more than the week before')
+  // Under $5 a side, or a change under 20%: nothing.
+  expect(trendOf(weekOf({ main: { 'claude-opus-5-5': tk(1e6) }, prev: { main: { 'claude-opus-5-5': tk(0.5e6) }, sub: {} } }))).toBe(null)
+  expect(trendOf(weekOf({ main: { 'claude-opus-5-5': tk(10e6) }, prev: { main: { 'claude-opus-5-5': tk(9e6) }, sub: {} } }))).toBe(null)
+  // Today: the scanner's count plus this session since it ran.
+  expect(todayUsd(weekOf({ today: { 'claude-opus-5-5': tk(1e6) }, sessionUsdAtScan: 2 }), 3.5)).toBe(5.5)
+  expect(todayUsd(weekOf(), 3)).toBe(null)
+})
+
+test('every tooltip says what it is and what to do', () => {
+  const l = live({ limits: [five(61)], cacheAt: NOW - 52 * MINUTE })
+  const tree = JSON.stringify(drawStrip(el, { live: l, week: null, move: movesOf(l, NOW, SETTINGS)[0], insights: 2, now: NOW, columns: 200, desktop: true, onMove() {}, onOpen() {}, onInsights() {} }))
+  for (const name of ['Context ·', 'Prompt cache ·', '5-hour usage limit ·', 'Session cost ·', 'Insights ·']) expect(tree).toContain(name)
+  expect((tree.match(/To do: /g) ?? []).length).toBeGreaterThanOrEqual(5)
+  expect(tree).toContain('WATCH')
+})
+
+test('the welcome shows above the strip until got it', () => {
+  const l = live()
+  const base = { live: l, week: null, move: undefined, insights: 0, now: NOW, columns: 160, desktop: false, onMove() {}, onOpen() {}, onInsights() {} }
+  const shown: any = drawStrip(el, { ...base, isWelcome: true })
+  expect(shown.children[0].key).toBe('welcome')
+  expect(JSON.stringify(shown)).toContain('"label":"got it"')
+  expect(refusedBoxProps(shown)).toEqual([])
+  expect(JSON.stringify(drawStrip(el, base))).not.toContain('got it')
+})
+
+test('the pane draws Today, tasks and the weekly change on both surfaces', () => {
+  const base = { added: 0, cached: 1, isCold: false, agentShare: 0, tools: 3 }
+  const l = live({
+    limits: [five(60)], limitSamples: { five_hour: [{ at: NOW - 40 * MINUTE, pct: 40 }, { at: NOW - 20 * MINUTE, pct: 50 }, { at: NOW, pct: 60 }] },
+    turns: [{ ...base, at: NOW - 30 * MINUTE, ms: MINUTE, usd: 2, prompt: 'fix the login redirect' }, { ...base, at: NOW, ms: MINUTE, usd: 0.4, prompt: 'add a test' }],
+  })
+  const w = weekOf({ main: { 'claude-opus-5-5': tk(10e6) }, prev: { main: { 'claude-opus-5-5': tk(6.25e6) }, sub: {} }, today: { 'claude-opus-5-5': tk(1e6) }, sessionUsdAtScan: 9 })
+  for (const desktop of [false, true]) {
+    for (const tab of ['moves', 'session', 'week', 'insights'] as const) {
+      const tree: any = drawPane(el, { tab, live: l, moves: movesOf(l, NOW, SETTINGS), insights: insightsOf(l, w, NOW), categories: [], week: w, weekBusy: false,
+        columns: 56, now: NOW, desktop, saved: { usd: 4.2, count: 2 }, today: todayUsd(w, l.usd) }, { setTab() {}, compact() {}, readWeek() {} })
+      const text = JSON.stringify(tree)
+      expect(refusedBoxProps(tree)).toEqual([])
+      expect(text).toContain('Today · all sessions')
+      expect(text).toContain('$4.80')
+      expect(text).toContain('Saved · 7 days')
+      if (tab === 'session') expect(text).toContain('fix the login redirect')
+      if (tab === 'session') expect(text).toContain('most expensive')
+      if (tab === 'week') expect(text).toContain('60% more than the week before')
+      if (tab === 'insights') expect(text).toContain('RIGHT NOW')
+    }
+  }
 })

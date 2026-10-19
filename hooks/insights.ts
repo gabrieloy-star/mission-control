@@ -3,12 +3,14 @@
 
 import type { Live, Turn, Week } from '../types'
 import { familyWeek } from './strip'
-import { money, tok } from './moves'
+import { clockOf, money, span, tok } from './moves'
+import { LOOP_AT, limitName, paceOf, trendOf } from './signals'
 import { priceOf, rewriteUsd, sumTokens, tokensUsd } from './prices'
 
 export type Insight = {
   id: string
-  kind: 'model' | 'habit'
+  /** `now`: happening as you work; `model`: model fit; `habit`: this session; `week`: the last 7 days. */
+  kind: 'now' | 'model' | 'habit' | 'week'
   tone: 'calm' | 'warn' | 'hot'
   title: string
   /** Why, and the exact step. */
@@ -54,8 +56,31 @@ function switchCost(live: Live, to: string): string {
   return live.tokens ? money(rewriteUsd(live.tokens, to)) : 'one full resend'
 }
 
-export function insightsOf(live: Live, week: Week | null): Insight[] {
+export function insightsOf(live: Live, week: Week | null, now: number): Insight[] {
   const out: Insight[] = []
+
+  // ---------- Right now ----------
+  for (const limit of live.limits) {
+    const pace = paceOf(limit, live.limitSamples?.[limit.kind], now)
+    if (!pace?.isShort) continue
+    const name = limitName(limit.kind)
+    out.push({
+      id: 'limit-' + limit.kind, kind: 'now', tone: pace.tone,
+      title: `At this pace the ${name} runs out at ${clockOf(pace.runsOutAt)}`,
+      how: `That is ${span(pace.resetsAt! - pace.runsOutAt)} before it resets at ${clockOf(pace.resetsAt!)}: you are using about ${Math.round(pace.perHour)}% an hour. ` +
+        'To make it last, run routine work on a lighter model (/model sonnet) and keep subagents for searches that need them.',
+    })
+  }
+  const loop = live.loop
+  if (loop && loop.count >= LOOP_AT) {
+    const spent = live.usd !== null ? Math.max(0, live.usd - loop.usdAtFirst) : 0
+    out.push({
+      id: 'loop', kind: 'now', tone: 'hot',
+      title: `Claude failed the same step ${loop.count} times in a row`,
+      how: `${loop.label} keeps failing${spent >= 0.01 ? `; ${money(spent)} spent since the first failure` : ''}. Press Esc to stop Claude, then say what to try instead or paste the part of the error that matters.`,
+    })
+  }
+
   const model = live.model
   const family = familyOf(model)
   const recent: Turn[] = live.turns.filter(t => !t.model || t.model === model).slice(-RECENT)
@@ -151,6 +176,19 @@ export function insightsOf(live: Live, week: Week | null): Insight[] {
     title: 'Start new tasks in a new session',
     how: `The context is at ${Math.round((live.tokens / live.window) * 100)}%. When you move to an unrelated task, type /clear: the new task does not need the old conversation, and every message gets cheaper.`,
   })
+
+  // ---------- This week ----------
+  const trend = trendOf(week)
+  if (trend) {
+    const pct = Math.round(Math.abs(trend.change) * 100)
+    const up = trend.change > 0
+    out.push({
+      id: 'week-trend', kind: 'week', tone: up ? 'warn' : 'calm',
+      title: `You spent ${pct}% ${up ? 'more' : 'less'} than the week before`,
+      how: `${money(trend.usd)} in the last 7 days against ${money(trend.prevUsd)} the 7 days before, at list prices.` +
+        (trend.project ? ` ${trend.project} accounts for ${Math.round(trend.projectShare * 100)}% of the difference.` : ''),
+    })
+  }
 
   return out
 }

@@ -5,9 +5,10 @@
 // as SVG; the terminal draws the same in glyphs.
 
 import type { Category, Live, Tab, Week } from '../types'
-import { cacheLeft, cacheWarnAt, money, seconds, span, tok } from './moves'
+import { cacheLeft, cacheWarnAt, clockOf, money, seconds, span, tok } from './moves'
 import type { Move } from './moves'
-import { INK, raceOf } from './strip'
+import { INK, MARK, raceOf } from './strip'
+import { paceOf, tasksOf, trendOf } from './signals'
 import { readUsd } from './prices'
 import { summarize } from './week'
 import { HABITS, modelName } from './insights'
@@ -24,6 +25,10 @@ export type PaneInput = {
   columns: number
   now: number
   desktop: boolean
+  /** What the strip's compactions saved over 7 days. */
+  saved?: { usd: number; count: number }
+  /** Today's cost across sessions; null until History has read them. */
+  today?: number | null
 }
 
 export type PaneActions = {
@@ -76,8 +81,8 @@ function glyphMeter(share: number, cells: number) {
 
 export function statusOf(moves: Move[]) {
   const top = moves[0]
-  if (!top || top.tone === 'calm') return { word: 'ALL GOOD', color: INK.mint }
-  return top.tone === 'warn' ? { word: 'SUGGESTION', color: INK.amber } : { word: 'ACT NOW', color: INK.coral }
+  if (!top || top.tone === 'calm') return { word: 'ALL GOOD', color: INK.mint, mark: MARK.calm }
+  return top.tone === 'warn' ? { word: 'SUGGESTION', color: INK.amber, mark: MARK.warn } : { word: 'ACT NOW', color: INK.coral, mark: MARK.hot }
 }
 
 export function drawPane(el: any, p: PaneInput, act: PaneActions) {
@@ -137,11 +142,30 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   const model = live.model ? modelName(live.model) : ''
   const head = Box({ key: 'head', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', children: [
     Box({ key: 'l', flexDirection: 'row', columnGap: 1, children: [
-      Text({ key: 's', bold: true, color: status.color, children: '● ' + status.word }),
+      Text({ key: 's', bold: true, color: status.color, children: status.mark + ' ' + status.word }),
       Text({ key: 'm', dimColor: true, children: [elapsed, model].filter(Boolean).join(' · ') }),
     ] }),
     Text({ key: 'c', bold: true, children: live.usd === null ? '–' : money(live.usd) }),
   ] })
+
+  // ---------- Today: three numbers on every tab ----------
+  const five = live.limits.find(l => l.kind === 'five_hour')
+  const fiveTile: Tile = (() => {
+    if (!five) return { label: '5-hour limit', value: '–' }
+    const r = raceOf(five, p.now)
+    const left = `${Math.max(0, 100 - Math.round(r.used))}% left`
+    const pace = paceOf(five, live.limitSamples?.five_hour, p.now)
+    if (pace?.isShort) return { label: '5-hour limit', value: `${left} · out ${clockOf(pace.runsOutAt)}`, color: pace.tone === 'hot' ? INK.coral : INK.amber }
+    return { label: '5-hour limit', value: left, ...(r.tone === 'calm' ? {} : { color: TONE[r.tone] }) }
+  })()
+  const today = tiles('today', [
+    { label: 'Today · all sessions', value: p.today === null || p.today === undefined ? '–' : money(p.today) },
+    fiveTile,
+    { label: 'Saved · 7 days', value: p.saved && p.saved.count ? money(p.saved.usd) : 'nothing yet', ...(p.saved && p.saved.usd >= 0.01 ? { color: INK.mint } : {}) },
+  ])
+  const todayNote = p.today === null || p.today === undefined
+    ? [Text({ key: 'today-n', dimColor: true, children: 'Today appears once History has read your sessions (about 10 s, no tokens).' })]
+    : []
 
   const tabs = Box({ key: 'tabs', flexDirection: 'row', columnGap: 1, flexWrap: 'wrap', children: TABS.map(t =>
     Button({ key: 'tab-' + t.tab, label: t.label, hotkey: t.hotkey, ...(t.tab === p.tab ? { variant: 'primary' } : { plain: true }), onPress: () => act.setTab(t.tab) })) })
@@ -265,6 +289,20 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
       Text({ key: 'c', color: INK.coral, children: '● cache had expired' }),
     ] }))
     if (cold.length) body.push(row('cold', `Messages after the cache expired · ${cold.length}`, money(cold.reduce((n, t) => n + t.usd, 0)), INK.coral))
+    const tasks = tasksOf(turns)
+    if (tasks.length) {
+      const shown = tasks.slice(-8).reverse()
+      const dear = Math.max(...tasks.map(t => t.usd))
+      const maxT = Math.max(0.0001, ...shown.map(t => t.usd))
+      body.push(caption('th', 'Cost per task', `latest ${shown.length} of ${tasks.length}`))
+      shown.forEach((t, i) => {
+        const what = t.prompt ? `“${t.prompt}”` : 'session start'
+        body.push(barRow('t' + i, `${clockOf(t.at)} · ${what}`, t.usd / maxT, money(t.usd), colorOf(t)))
+        const bits = [t.messages > 1 ? `${t.messages} messages` : '', t.tools ? `${t.tools} tool call${t.tools === 1 ? '' : 's'}` : '', t.isCold ? 'cache had expired' : '', t.usd === dear && tasks.length > 1 ? '▲ most expensive' : '']
+        const line = bits.filter(Boolean).join(' · ')
+        if (line) body.push(Text({ key: 'td' + i, dimColor: true, children: '   ' + line }))
+      })
+    }
     if (probes.length) {
       body.push(caption('ph', 'Subagents', 'latest 5'))
       const maxP = Math.max(1, ...probes.map(w => w.tokens))
@@ -285,7 +323,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   if (p.tab === 'week') {
     if (p.weekBusy) {
       body = [Text({ key: 'busy', color: INK.cobalt, children: '◌ Reading the last 7 days…' }),
-        Text({ key: 'why', dimColor: true, children: 'About 6 seconds, from the transcripts on this Mac. It costs no tokens.' })]
+        Text({ key: 'why', dimColor: true, children: 'About 10 seconds, from the transcripts on this Mac. It costs no tokens.' })]
     } else if (!p.week) {
       body = [Text({ key: 'none', dimColor: true, children: 'The last 7 days, read from the session files on this Mac. No tokens.' }),
         Box({ key: 'b', marginTop: 1, children: [Button({ key: 'read', label: 'Load history', variant: 'primary', hotkey: 'r', onPress: act.readWeek })] })]
@@ -294,11 +332,18 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
       const s = summarize(w)
       const share = s.tokens ? s.subTokens / s.tokens : 0
       const sp = Math.round(share * 100)
+      const trend = trendOf(w)
       body = [tiles('k', [
         { label: 'Tokens · 7 days', value: tok(s.tokens) },
         { label: 'Cost at list prices', value: money(s.usd) },
         { label: 'From cache', value: `${Math.round(s.readShare * 100)}%`, color: s.readShare >= 0.9 ? INK.mint : INK.amber },
       ])]
+      if (trend) {
+        const up = trend.change > 0
+        body.push(note('trend', `${Math.round(Math.abs(trend.change) * 100)}% ${up ? 'more' : 'less'} than the week before (${money(trend.prevUsd)} → ${money(trend.usd)})` +
+          (trend.project ? `. ${trend.project} accounts for ${Math.round(trend.projectShare * 100)}% of the difference.` : '.'), up ? INK.amber : INK.mint))
+      }
+      if (p.saved && p.saved.count) body.push(note('saved', `Usage Coach's compactions saved about ${money(p.saved.usd)} in 7 days (${p.saved.count} compaction${p.saved.count === 1 ? '' : 's'}).`, INK.mint))
       body.push(caption('wh', 'Who spent it', `${w.sessions} sessions`))
       if (desktop) {
         const H = 18, sw = share * W
@@ -338,17 +383,27 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
     })
     const model = p.insights.filter(i => i.kind === 'model')
     const habits = p.insights.filter(i => i.kind === 'habit')
+    const urgent = p.insights.filter(i => i.kind === 'now')
+    const weekly = p.insights.filter(i => i.kind === 'week')
     body = [tiles('k', [
       { label: 'Model', value: live.model ? modelName(live.model) : '–' },
       { label: 'Insights', value: String(p.insights.length), color: p.insights.length ? INK.amber : INK.mint },
       { label: 'Messages', value: String(live.turns.length) },
     ])]
+    if (urgent.length) {
+      body.push(caption('nh', 'Right now'))
+      urgent.forEach((i, n) => body.push(card('n' + n, i)))
+    }
     body.push(caption('mh', 'Model fit', model.length ? undefined : 'looks right'))
     if (model.length) model.forEach((i, n) => body.push(card('m' + n, i)))
     else body.push(Text({ key: 'm-ok', dimColor: true, children: live.turns.length >= 4 ? 'The model matches the work so far.' : 'A few more messages and Usage Coach can tell whether the model fits the work.' }))
     body.push(caption('hh', 'This session', habits.length ? undefined : 'nothing to change'))
     if (habits.length) habits.forEach((i, n) => body.push(card('h' + n, i)))
     else body.push(Text({ key: 'h-ok', dimColor: true, children: 'Cache, context and subagents look healthy.' }))
+    if (weekly.length) {
+      body.push(caption('wh', 'This week'))
+      weekly.forEach((i, n) => body.push(card('w' + n, i)))
+    }
     body.push(caption('gh', 'Good habits'))
     HABITS.forEach((h, n) => body.push(note('g' + n, h, INK.cobalt)))
   }
@@ -368,6 +423,6 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   ] })
 
   return Box({ flexDirection: 'column', width: cols, children: [
-    head, divider('d0'), tabs, gap('g0'), ...body, gap('g1'), divider('d1'), footer,
+    head, divider('d0'), today, ...todayNote, gap('gt'), tabs, gap('g0'), ...body, gap('g1'), divider('d1'), footer,
   ] })
 }

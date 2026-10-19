@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Usage Coach's week scanner: sums the token usage Claude Code recorded in your local
 // transcripts (~/.claude/projects) over the last N days. Reads files only; sends nothing.
-// Usage: node week.mjs [--days 7] [--root <projects dir>]
+// Usage: node week.mjs [--days 7] [--prev] [--root <projects dir>]
 // Prints one JSON object: tokens by model for main conversations and subagents, subagent runs
-// by type, cold cache rewrites over 100k, and the top projects.
+// by type, cold cache rewrites over 100k, the top projects, and today's tokens. With --prev it
+// also sums the same number of days before, overall and for the top projects.
 
 import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -17,7 +18,10 @@ const opt = (name, fallback) => {
 }
 const days = Number(opt('--days', '7')) || 7
 const root = opt('--root', join(homedir(), '.claude', 'projects'))
+const withPrev = args.includes('--prev')
 const since = Date.now() - days * 24 * 3600_000
+const prevSince = withPrev ? since - days * 24 * 3600_000 : since
+const midnight = new Date().setHours(0, 0, 0, 0)
 const COLD_AT = 100_000
 
 const zero = () => ({ input: 0, output: 0, read: 0, write5m: 0, write1h: 0 })
@@ -26,6 +30,10 @@ const sub = {}
 const agentTypes = {}
 const cold = { count: 0, byModel: {} }
 const projects = new Map()
+const prev = { main: {}, sub: {} }
+const today = {}
+/** Tokens by model per project: this period and the one before. */
+const byProject = new Map()
 const sessions = new Set()
 let requests = 0
 
@@ -50,7 +58,7 @@ function* jsonlFiles(dir) {
     if (e.isDirectory()) yield* jsonlFiles(path)
     else if (e.name.endsWith('.jsonl')) {
       try {
-        if (statSync(path).mtimeMs >= since) yield path
+        if (statSync(path).mtimeMs >= prevSince) yield path
       } catch {
         // Gone while scanning.
       }
@@ -68,10 +76,20 @@ function agentTypeOf(file) {
   }
 }
 
+function add(t, u, w5m, w1h) {
+  t.input += u.input_tokens ?? 0
+  t.output += u.output_tokens ?? 0
+  t.read += u.cache_read_input_tokens ?? 0
+  t.write5m += w5m
+  t.write1h += w1h
+}
+
 async function scan(file, project) {
   const isSub = file.includes('/subagents/')
   const seen = new Set()
   let tokens = 0
+  const mine = byProject.get(project) ?? { cur: {}, prev: {} }
+  byProject.set(project, mine)
   const lines = createInterface({ input: createReadStream(file), crlfDelay: Infinity })
   for await (const line of lines) {
     if (!line.includes('"usage"')) continue
@@ -86,18 +104,20 @@ async function scan(file, project) {
     if (!u || !msg.id || seen.has(msg.id)) continue
     seen.add(msg.id)
     const ts = Date.parse(row.timestamp ?? '')
-    if (!Number.isFinite(ts) || ts < since) continue
+    if (!Number.isFinite(ts) || ts < prevSince) continue
     const model = msg.model || 'unknown'
     if (model === '<synthetic>') continue
-    const bucket = (isSub || row.isSidechain ? sub : main)
-    const t = (bucket[model] ??= zero())
+    const isSide = isSub || row.isSidechain
     const w1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0
     const w5m = u.cache_creation?.ephemeral_5m_input_tokens ?? Math.max(0, (u.cache_creation_input_tokens ?? 0) - w1h)
-    t.input += u.input_tokens ?? 0
-    t.output += u.output_tokens ?? 0
-    t.read += u.cache_read_input_tokens ?? 0
-    t.write5m += w5m
-    t.write1h += w1h
+    if (ts < since) {
+      add(((isSide ? prev.sub : prev.main)[model] ??= zero()), u, w5m, w1h)
+      add((mine.prev[model] ??= zero()), u, w5m, w1h)
+      continue
+    }
+    add(((isSide ? sub : main)[model] ??= zero()), u, w5m, w1h)
+    add((mine.cur[model] ??= zero()), u, w5m, w1h)
+    if (ts >= midnight) add((today[model] ??= zero()), u, w5m, w1h)
     const total = (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + w5m + w1h
     tokens += total
     requests++
@@ -127,6 +147,9 @@ for (const dir of dirs) {
   for (const file of jsonlFiles(join(root, dir))) await scan(file, project)
 }
 
+const sizeOf = byModel => Object.values(byModel).reduce((n, t) => n + t.input + t.output + t.read + t.write5m + t.write1h, 0)
+const topProjects = [...byProject].sort((a, b) => sizeOf(b[1].cur) + sizeOf(b[1].prev) - sizeOf(a[1].cur) - sizeOf(a[1].prev)).slice(0, 12)
+
 process.stdout.write(JSON.stringify({
   since: `${days}d`,
   sessions: sessions.size,
@@ -135,5 +158,7 @@ process.stdout.write(JSON.stringify({
   sub,
   agentTypes,
   cold,
-  projects: [...projects].map(([name, tokens]) => ({ name, tokens })).sort((a, b) => b.tokens - a.tokens).slice(0, 8),
+  projects: [...projects].filter(([, tokens]) => tokens > 0).map(([name, tokens]) => ({ name, tokens })).sort((a, b) => b.tokens - a.tokens).slice(0, 8),
+  today,
+  ...(withPrev ? { prev, byProject: Object.fromEntries(topProjects) } : {}),
 }))

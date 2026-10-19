@@ -8,6 +8,7 @@ import type { Limit, Live, Week } from '../types'
 import { HEAVY_AT, HOUR, cacheEnd, cacheLeft, cacheWarnAt, clockOf, money, savingOf, span, tok, ttlOf } from './moves'
 import type { Move } from './moves'
 import { sumTokens, tokensUsd } from './prices'
+import { paceOf, tasksOf } from './signals'
 
 export const INK = {
   cobalt: '#5b8def',
@@ -19,6 +20,15 @@ export const INK = {
 }
 const TERM: Record<string, string> = { calm: 'green', warn: 'yellow', hot: 'red' }
 const TONE: Record<string, string> = { calm: INK.mint, warn: INK.amber, hot: INK.coral }
+/** One word and one symbol per state, so a state reads without its color. */
+export const WORD: Record<string, string> = { calm: 'ALL GOOD', warn: 'WATCH', hot: 'ACT NOW' }
+export const MARK: Record<string, string> = { calm: '✓', warn: '◆', hot: '▲' }
+type Tone = 'calm' | 'warn' | 'hot'
+
+/** Every tooltip reads the same way: the part and its state, what it is, then what to do. */
+export function tipText(t: { name: string; now: string; tone: Tone; what: string[]; todo: string }): string {
+  return [`${MARK[t.tone]} ${t.name} · ${t.now} · ${WORD[t.tone]}`, ...t.what.filter(Boolean), 'To do: ' + t.todo].join('\n')
+}
 
 /** Desktop gauges are sized as if a cell were this many CSS pixels wide. */
 const PX_PER_CELL = 7.5
@@ -44,6 +54,9 @@ export type StripInput = {
   isQueued?: boolean
   onOpen: () => void
   onInsights: () => void
+  /** First session after install: a short welcome above the strip until "got it". */
+  isWelcome?: boolean
+  onWelcomeDone?: () => void
 }
 
 // ---------- Gauges ----------
@@ -143,13 +156,21 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     const gauge = desktop ? cellsOf(96) : 13
     parts.push({
       key: 'tank', rank: 1, cells: gauge + 1 + value.length + (addText ? 1 + addText.length : 0),
-      tip: [
-        `Context: ${value} of ${tok(live.window)} tokens (${Math.round(((live.tokens ?? 0) / (live.window || 1)) * 100)}%)`,
-        'Everything Claude sends with every message',
-        live.fixed !== null ? `Grey: ${tok(live.fixed)} of instructions, tools and memory` : '',
-        'Blue: your conversation · bright: what the last message added',
-        'Red line at 85%: past it, compacting pays off',
-      ].filter(Boolean).join('\n'),
+      tip: (() => {
+        const pct = Math.round(((live.tokens ?? 0) / (live.window || 1)) * 100)
+        const tone: Tone = pct >= 85 ? 'hot' : pct >= 60 ? 'warn' : 'calm'
+        return tipText({
+          name: 'Context', now: `${value} of ${tok(live.window)} (${pct}%)`, tone,
+          what: [
+            'Everything Claude sends with every message',
+            live.fixed !== null ? `Grey: ${tok(live.fixed)} of instructions, tools and memory` : '',
+            'Blue: your conversation · bright: what the last message added · red line: 85%',
+          ],
+          todo: tone === 'hot' ? 'compact (press c), or start a new session for the next task'
+            : tone === 'warn' ? 'type /clear before an unrelated task'
+            : 'nothing',
+        })
+      })(),
       draw: () => {
         const out: unknown[] = []
         if (desktop) out.push(Svg({ key: 'g', source: tankSvg(live), width: 95, height: 12, alt: `Context: ${value} of ${tok(live.window)}` }))
@@ -180,9 +201,15 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     const value = span(left)
     parts.push({
       key: 'fuse', rank: 3, cells: (desktop ? cellsOf(52) : 7) + 1 + value.length,
-      tip: left > 0
-        ? `Prompt cache: valid until ${clockOf(cacheEnd(live)!)} (${ttl >= HOUR ? '1-hour' : '5-minute'} cache)\nWhile it lasts, each message reads the context at a fraction of the price\nAfter it expires, the next message pays full price to send it all again`
-        : 'Prompt cache expired\nThe next message pays full price to send the whole context again\nCompact first, or start a new session',
+      tip: tipText({
+        name: 'Prompt cache', now: left > 0 ? `valid until ${clockOf(cacheEnd(live)!)}` : 'expired', tone: state as Tone,
+        what: left > 0
+          ? [`A ${ttl >= HOUR ? '1-hour' : '5-minute'} cache: while it lasts, each message reads the context at a fraction of the price`, 'After it expires, the next message pays full price to send it all again']
+          : ['The next message pays full price to send the whole context again'],
+        todo: state === 'hot' ? 'compact before your next message (press c), or start a new session'
+          : state === 'warn' ? `send your next message before ${clockOf(cacheEnd(live)!)}, or compact (press c) before a break`
+          : 'nothing',
+      }),
       draw: () => {
         const out: unknown[] = []
         if (desktop) out.push(Svg({ key: 'g', source: fuseSvg(left, ttl, warn), width: 52, height: 12, alt: `Prompt cache: ${value} left` }))
@@ -202,25 +229,31 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     const r = raceOf(limit, now)
     if (r.left !== null && r.left <= 0) return
     const value = Math.max(0, 100 - Math.round(r.used)) + '%'
+    const pace = paceOf(limit, live.limitSamples?.[limit.kind], now)
+    const tone: Tone = pace?.isShort ? (pace.tone === 'hot' || r.tone === 'hot' ? 'hot' : 'warn') : r.tone as Tone
     parts.push({
       key: 'race-' + limit.kind, rank: limit.kind === 'five_hour' ? 5 : 6 + i, cells: r.label.length + 1 + (desktop ? cellsOf(40) : 6) + 1 + value.length,
-      tip: [
-        `${limit.kind === 'five_hour' ? '5-hour' : limit.kind === 'seven_day' ? 'Weekly' : r.label} usage limit: ${value} left`,
-        r.clock !== null ? `Ring: ${Math.max(0, 100 - Math.round(r.clock))}% of the time left` : '',
-        'Bar behind the ring: you are using it faster than time passes',
-        r.left !== null ? `Resets in ${span(r.left)}` : '',
-      ].filter(Boolean).join('\n'),
+      tip: tipText({
+        name: `${limit.kind === 'five_hour' ? '5-hour' : limit.kind === 'seven_day' ? 'Weekly' : r.label} usage limit`, now: `${value} left`, tone,
+        what: [
+          pace?.isShort ? `At this pace it runs out at ${clockOf(pace.runsOutAt)}, ${span(pace.resetsAt! - pace.runsOutAt)} before it resets` : '',
+          r.clock !== null ? `Bar: usage left · ring: ${Math.max(0, 100 - Math.round(r.clock))}% of the time left` : '',
+          'A bar behind the ring means you use it faster than time passes',
+          r.left !== null ? `Resets in ${span(r.left)}` : '',
+        ],
+        todo: tone === 'calm' ? 'nothing' : 'run routine work on a lighter model (/model sonnet) and keep subagents for real searches',
+      }),
       draw: () => {
         const out: unknown[] = [Text({ key: 'l', dimColor: true, children: r.label })]
-        if (desktop) out.push(Svg({ key: 'g', source: raceSvg(r.used, r.clock, r.tone), width: 40, height: 10, alt: `Usage limit ${r.label}: ${value} left` }))
+        if (desktop) out.push(Svg({ key: 'g', source: raceSvg(r.used, r.clock, tone), width: 40, height: 10, alt: `Usage limit ${r.label}: ${value} left` }))
         else {
           const u = Math.round(((100 - r.used) / 100) * 6)
           const c = r.clock === null ? -1 : Math.min(5, Math.round(((100 - r.clock) / 100) * 6))
           let bar = ''
           for (let k = 0; k < 6; k++) bar += k < u ? '━' : k === c ? '○' : '─'
-          out.push(Text({ key: 'g', color: TERM[r.tone], children: bar }))
+          out.push(Text({ key: 'g', color: TERM[tone], children: bar }))
         }
-        out.push(Text({ key: 'v', bold: true, children: value }))
+        out.push(Text({ key: 'v', bold: true, ...(tone === 'calm' ? {} : { color: TONE[tone] }), children: value }))
         return out
       },
     })
@@ -233,7 +266,18 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     const delta = lastTurn && lastTurn.usd >= 0.005 ? '+' + money(lastTurn.usd).replace(/^\$/, '') : ''
     parts.push({
       key: 'spend', rank: 4, cells: value.length + (delta ? 1 + delta.length : 0),
-      tip: `Session cost so far: ${value}${delta ? '\nLast message: +$' + delta.replace(/^\+/, '') : ''}\nAt API list prices: on a subscription it is an equivalent, not a bill`,
+      tip: (() => {
+        const task = tasksOf(live.turns).slice(-1)[0]
+        return tipText({
+          name: 'Session cost', now: value, tone: 'calm',
+          what: [
+            delta ? `Last message: +$${delta.replace(/^\+/, '')}` : '',
+            task && task.messages > 1 ? `Last task: ${money(task.usd)} over ${task.messages} messages` : '',
+            'At API list prices: on a subscription it is an equivalent, not a bill',
+          ],
+          todo: 'nothing · the Session tab shows the cost of each task',
+        })
+      })(),
       draw: () => [Text({ key: 'v', bold: true, children: value }), ...(delta ? [Text({ key: 'd', dimColor: true, children: delta })] : [])],
     })
   }
@@ -244,22 +288,28 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
   const short = move ? `${move.short}${move.usd > 0.01 && move.unit === 'now' ? ' ' + money(move.usd) : ''}` : 'all good'
   const moveCells = (label: string) => label.length + (move?.key ? 7 : 2)
   const drawMove = (label: string) => () => {
-    if (!move) return [Text({ key: 'm', color: INK.mint, children: '✓ ' + label })]
-    if (move.key && s.isQueued) return [Text({ key: 'm', color: INK.amber, children: '◆ compaction queued' })]
+    if (!move) return [Text({ key: 'm', color: INK.mint, children: MARK.calm + ' ' + label })]
+    if (move.key && s.isQueued) return [Text({ key: 'm', color: INK.amber, children: MARK.warn + ' compaction queued' })]
     if (move.key) return [Button({ key: 'move', label, hotkey: move.key, variant: 'primary', onPress: s.onMove })]
-    return [Text({ key: 'm', color: TONE[move.tone], children: '◆ ' + label })]
+    return [Text({ key: 'm', color: TONE[move.tone], children: MARK[move.tone] + ' ' + label })]
   }
   const moveTip = move
-    ? `Suggestion: ${move.title}\n${move.how}${savingOf(move) ? '\nSaves' + savingOf(move).replace(' · saves', '') : ''}`
-    : 'All good\nNothing worth changing right now'
+    ? tipText({
+      name: 'Suggestion', now: move.title, tone: move.tone,
+      what: [savingOf(move) ? 'Saves' + savingOf(move).replace(' · saves', '') : ''],
+      todo: move.how,
+    })
+    : tipText({ name: 'Suggestion', now: 'none', tone: 'calm', what: ['No change would save $1 or more right now'], todo: 'nothing' })
   parts.push({ key: 'move', rank: 2, cells: moveCells(long), draw: drawMove(long), tip: moveTip })
   const insightLabel = s.insights ? `insights ${s.insights}` : 'insights'
   parts.push({
     key: 'insights', rank: 2.5, cells: insightLabel.length + 7,
     draw: () => [Button({ key: 'insights', label: insightLabel, hotkey: 'i', plain: true, onPress: s.onInsights })],
-    tip: s.insights
-      ? `Insights: ${s.insights} for this session\nWhether your model fits the work, and habits that keep sessions cheap\nClick or press i`
-      : 'Insights\nWhether your model fits the work, and habits that keep sessions cheap\nClick or press i',
+    tip: tipText({
+      name: 'Insights', now: s.insights ? `${s.insights} for this session` : 'none open', tone: 'calm',
+      what: ['Your usage limits, whether the model fits the work, and habits that keep sessions cheap'],
+      todo: 'click or press i to read them',
+    }),
   })
   parts.push({ key: 'open', rank: 1.5, cells: 11, draw: () => [Button({ key: 'open', label: 'details', hotkey: 'o', onPress: s.onOpen })], card: statusCard(s) })
 
@@ -284,7 +334,8 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
   const order = ['tank', 'fuse', 'race-five_hour', 'race-seven_day', 'spend', 'move', 'insights', 'open']
   kept.sort((a, b) => (order.indexOf(a.key) + 99) % 99 - (order.indexOf(b.key) + 99) % 99)
 
-  return Box({
+  const line = Box({
+    key: 'strip',
     flexDirection: 'row',
     alignItems: 'center',
     columnGap: GAP,
@@ -296,6 +347,21 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
         : p.draw(),
     })),
   })
+  if (!s.isWelcome) return line
+  const welcome = Box({
+    key: 'welcome', flexDirection: 'column', borderStyle: 'round', borderColor: INK.cobalt, paddingX: 1,
+    children: [
+      Text({ key: 'a', bold: true, children: 'Usage Coach: this line shows your context, prompt cache, usage limits and session cost. It costs no tokens.' }),
+      Text({ key: 'b', dimColor: true, children: desktop
+        ? 'Hover any part to see what it means and what to do. The right end shows the change that saves the most.'
+        : 'The right end shows the change that saves the most. Press i for insights.' }),
+      Box({ key: 'c', flexDirection: 'row', columnGap: 2, alignItems: 'center', children: [
+        Text({ key: 't', dimColor: true, children: 'Click details or press O for the full panel.' }),
+        Button({ key: 'ok', label: 'got it', variant: 'primary', onPress: s.onWelcomeDone ?? (() => {}) }),
+      ] }),
+    ],
+  })
+  return Box({ flexDirection: 'column', children: [welcome, line] })
 }
 
 /** Tokens and list-price dollars a model family spent in the week, main and subagents together. */
@@ -322,8 +388,11 @@ export function statusCard(s: StripInput): Card {
   for (const limit of live.limits) {
     const r = raceOf(limit, now)
     const left = Math.max(0, 100 - Math.round(r.used))
-    const refuel = r.left !== null && r.left > 0 ? ` · resets in ${span(r.left)}` : ''
-    rows.push({ label: names[limit.kind] ?? limit.kind, value: `${left}% left${refuel}`, color: r.tone === 'calm' ? undefined : TONE[r.tone] })
+    const resets = r.left !== null && r.left > 0 ? ` · resets in ${span(r.left)}` : ''
+    const pace = paceOf(limit, live.limitSamples?.[limit.kind], now)
+    const tone = pace?.isShort ? (pace.tone === 'hot' ? 'hot' : 'warn') : r.tone
+    rows.push({ label: names[limit.kind] ?? limit.kind, value: `${left}% left${resets}`, color: tone === 'calm' ? undefined : TONE[tone] })
+    if (pace?.isShort) rows.push({ label: `   at this pace it runs out at ${clockOf(pace.runsOutAt)}` })
   }
   if (!live.limits.length) rows.push({ label: 'Usage limits: Claude reports them after the next message' })
   if (s.week) {
@@ -375,6 +444,6 @@ function hoverCard(el: any, tip: string) {
     borderStyle: 'round',
     borderColor: 'subtle',
     backgroundColor: 'background',
-    children: tip.split('\n').map((line, i) => Text({ key: 't' + i, dimColor: i > 0, bold: i === 0, children: line })),
+    children: tip.split('\n').map((line, i) => Text({ key: 't' + i, dimColor: i > 0 && !line.startsWith('To do:'), bold: i === 0, children: line })),
   })
 }

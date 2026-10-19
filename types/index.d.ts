@@ -1,6 +1,27 @@
 /** A rate-limit window as Claude reports it: `five_hour`, `seven_day`, or a gateway's. */
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
 
+/** One reading of a usage limit, for the pace. */
+export type LimitSample = { at: number; pct: number }
+
+/** A step Claude failed on, in a row: the same command or file. */
+export type Loop = { key: string; label: string; count: number; usdAtFirst: number; isTold: boolean }
+
+/** What one compaction saved, in list-price dollars: kept 7 days in the store. */
+export type Saving = { id: string; at: number; kind: 'idle' | 'button'; usd: number }
+
+/** A compaction whose saving is still being counted. */
+export type SavingRun = {
+  id: string
+  kind: 'idle' | 'button'
+  /** Dollars so far; the compaction's own cost counts against it. */
+  usd: number
+  /** What each later request saves (button), or 0 when the saving comes at once (idle). */
+  perRequest: number
+  /** Idle only: the cache would have expired here; a return before it saved nothing. */
+  expiresAt?: number
+}
+
 /** One main-loop turn, as the ledger line and the Session tab read it. */
 export type Turn = {
   /** When it ended, in `$.clock.now()` milliseconds. */
@@ -22,6 +43,10 @@ export type Turn = {
   tools?: number
   /** The model that answered. */
   model?: string
+  /** Main-loop requests it made. */
+  requests?: number
+  /** The first words of your request; absent when the turn continued without one. */
+  prompt?: string
 }
 
 /** A heavy tool output or a subagent run: what the weight under its row shows. */
@@ -67,6 +92,14 @@ export type Live = {
   mcpUsed: string[]
   budgetWarned: boolean
   lastToastAt: number
+  /** Recent readings of each usage limit, by kind. */
+  limitSamples?: Record<string, LimitSample[]>
+  /** Forecasts already said, as `kind@resetsAt`. */
+  toldPace?: string[]
+  /** The step Claude is failing on, while the failures run. */
+  loop?: Loop | null
+  /** The compaction whose saving is being counted. */
+  savingRun?: SavingRun | null
 }
 
 export type Tab = 'moves' | 'tank' | 'session' | 'week' | 'insights'
@@ -88,6 +121,14 @@ export type Week = {
   /** Requests that wrote 100k or more of context to the cache (a cold return), by model. */
   cold: { count: number; byModel: Record<string, number> }
   projects: { name: string; tokens: number }[]
+  /** The 7 days before: tokens by model. */
+  prev?: { main: Record<string, Tokens>; sub: Record<string, Tokens> }
+  /** Tokens by model for the top projects, this week and the one before. */
+  byProject?: Record<string, { cur: Record<string, Tokens>; prev: Record<string, Tokens> }>
+  /** Today since midnight, all sessions: tokens by model. */
+  today?: Record<string, Tokens>
+  /** This session's cost when the scanner ran: what today adds on top. */
+  sessionUsdAtScan?: number
 }
 
 /** One row of the side pane's Category list. */
@@ -101,6 +142,8 @@ declare module 'claude-code' {
       week: Week | null
       weekBusy: boolean
       categories: Category[]
+      saved: { usd: number; count: number }
+      isWelcome: boolean
     }
   }
 }

@@ -13,6 +13,8 @@ export const CACHE_TTL = HOUR
 export const HEAVY_AT = 200_000
 /** From here, after the cache expired, starting over with a note beats resending. */
 export const FRESH_AT = 300_000
+/** Failures in a row on the same step that make Claude's loop the first thing to fix. */
+export const LOOP_AT = 3
 /** Ranking only: requests in an hour of steady work. */
 const CALLS_PER_HOUR = 100
 
@@ -124,6 +126,18 @@ export function movesOf(live: Live, now: number, s: Settings): Move[] {
   const end = cacheEnd(live)
   const model = live.model
 
+  // 0. Claude keeps failing the same step: stopping it saves more than any other change.
+  const loop = live.loop
+  if (loop && loop.count >= LOOP_AT) {
+    const spent = live.usd !== null ? Math.max(0, live.usd - loop.usdAtFirst) : 0
+    out.push({
+      id: 'loop', tone: 'hot', unit: 'now', usd: 0, score: 0,
+      title: `Claude failed the same step ${loop.count} times${spent >= 0.01 ? ` (${money(spent)})` : ''}`,
+      short: `stuck · ${loop.count} failures`,
+      how: `${loop.label} keeps failing. Press Esc to stop Claude, then say what to try instead.`,
+    })
+  }
+
   // 1. The cache expired: the next message sends everything again at full price.
   if (left !== null && left <= 0 && tokens > 0) {
     if (tokens >= FRESH_AT) {
@@ -217,7 +231,11 @@ export function movesOf(live: Live, now: number, s: Settings): Move[] {
   }
 
   // Small savings are noise: only what saves at least `minSaving` over an hour of work.
-  return out.filter(m => m.id === 'budget' || m.score >= s.minSaving).sort((a, b) => b.score - a.score)
+  // A failing loop and the budget carry no saving of their own; the loop always comes first.
+  const first = (m: Move) => (m.id === 'loop' ? 1 : 0)
+  return out
+    .filter(m => m.id === 'loop' || m.id === 'budget' || m.score >= s.minSaving)
+    .sort((a, b) => first(b) - first(a) || b.score - a.score)
 }
 
 /** The suggestion in one line, for the empty prompt and the toast. */
