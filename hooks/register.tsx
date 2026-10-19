@@ -1,8 +1,8 @@
-// Mission Control: where your tokens go, and the one move that saves the most right now.
-//   The strip above the prompt: tank (context), fuse (prompt cache), race (5h and 7d limits),
-//   spend, and the move, on one key. A ledger line after each answer. A weight under heavy
-//   tool outputs and every subagent. A tip in the empty prompt. The side pane (/mission).
-//   The idle fuse compacts a quiet session before its cache cools.
+// Mission Control: where your tokens go, and the one suggestion that saves the most right now.
+//   The strip above the prompt: context, prompt cache, usage limits (5 hours and 7 days),
+//   session cost, and the suggestion, on one key. An optional line after each answer. A note
+//   under large tool outputs and every subagent. A tip in the empty prompt. The side pane (/mission).
+//   Idle compact compacts a quiet session a few minutes before its prompt cache expires.
 // It only reads figures Claude already reports and never writes into the conversation:
 // watching costs no tokens. The one thing that spends is a compaction, when it saves more.
 
@@ -10,12 +10,13 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Category, Live, Tab, Tokens, Turn, Week, Weight } from '../types'
-import { HOUR, MINUTE, conversationOf, money, movesOf, seconds, tipOf, tok } from './moves'
+import { CACHE_TTL, HOUR, MINUTE, cacheEnd, conversationOf, money, movesOf, seconds, tipOf, tok, ttlOf } from './moves'
 import type { Settings } from './moves'
 import { sumTokens, tokensUsd } from './prices'
 import { drawStrip } from './strip'
 import { drawPane } from './pane'
-import { compactNow, defuse, light, newFuse } from './idle'
+import { defuse, light, newFuse } from './idle'
+import { insightsOf } from './insights'
 import type { FuseOptions } from './idle'
 
 const PLUGIN = 'mission-control'
@@ -48,6 +49,8 @@ let turnRead = 0
 let turnInput = 0
 let turnAgentUsd = 0
 let turnCold = false
+let turnOut = 0
+let turnTools = 0
 /** A main-loop turn is running: a compaction now would be refused, so the strip queues one. */
 let isTurnRunning = false
 let isCompactQueued = false
@@ -57,12 +60,13 @@ const fuse = newFuse()
 
 // ---------- Settings ----------
 
-function settingsOf(options: Record<string, unknown> | undefined): Settings & { idleMs: number; telemetry: boolean } {
+function settingsOf(options: Record<string, unknown> | undefined): Settings & { leadMs: number; telemetry: boolean } {
   const o = options ?? {}
   return {
     budget: typeof o.budget === 'number' && o.budget > 0 ? o.budget : 0,
     minTokens: typeof o.minTokens === 'number' && o.minTokens >= 0 ? o.minTokens : 40_000,
-    idleMs: (typeof o.idleMinutes === 'number' && o.idleMinutes >= 0 ? o.idleMinutes : 50) * MINUTE,
+    minSaving: typeof o.minSaving === 'number' && o.minSaving >= 0 ? o.minSaving : 1,
+    leadMs: (typeof o.minutesBeforeExpiry === 'number' && o.minutesBeforeExpiry >= 0 ? o.minutesBeforeExpiry : 5) * MINUTE,
     telemetry: o.telemetry === true,
   }
 }
@@ -114,21 +118,25 @@ async function conversationNow($: EngineInterface): Promise<number | null> {
 
 const ASKED = 'The user asked Mission Control to compact now to keep the next messages cheap. Preserve open tasks, decisions with their reasons, pending follow-ups, files touched, and anything the user asked to keep.'
 
-/** Compacts now when Claude is idle; while a turn runs, queues /compact to run as soon as it ends. */
-async function compactFromStrip($: EngineInterface, o: FuseOptions) {
-  if (isTurnRunning) {
-    if (isCompactQueued) return $.ui.toast('Mission Control: the compaction is already queued')
-    isCompactQueued = true
-    $.ui.toast('Mission Control: compaction queued, it runs as soon as Claude finishes this message')
-    void $.command.run({ command: 'compact', args: ASKED })
-      .catch(() => $.ui.toast('Mission Control: the queued compaction did not run. Type /compact'))
-      .finally(() => { isCompactQueued = false })
-    return
-  }
-  const conv = await o.conversation().catch(() => null)
-  if (conv !== null && conv < 5_000) return $.ui.toast(`Mission Control: only ${tok(conv)} of conversation, nothing worth compacting yet`)
-  const done = await compactNow($, o, ASKED)
-  if (!done) $.ui.toast('Mission Control: the compaction did not run. Type /compact')
+/**
+ * Compacts from the strip or the pane. Always through /compact, which the engine queues while
+ * Claude is answering and runs as soon as the session is idle: pressing never fails mid-answer.
+ */
+async function compactFromStrip($: EngineInterface) {
+  if (isCompactQueued) return $.ui.toast('Mission Control: the compaction is already queued')
+  const conv = conversationOf(await read($, live))
+  if (conv > 0 && conv < 5_000) return $.ui.toast(`Mission Control: only ${tok(conv)} tokens of conversation, nothing worth compacting yet`)
+  isCompactQueued = true
+  $.ui.invalidate('ui.render')
+  $.ui.toast(isTurnRunning
+    ? 'Mission Control: compaction queued, it runs as soon as Claude finishes this answer'
+    : 'Mission Control: compacting now')
+  void $.command.run({ command: 'compact', args: ASKED })
+    .catch(() => $.ui.toast('Mission Control: the compaction did not run. Type /compact'))
+    .finally(() => {
+      isCompactQueued = false
+      $.ui.invalidate('ui.render')
+    })
 }
 
 async function togglePane($: EngineInterface) {
@@ -142,6 +150,19 @@ async function togglePane($: EngineInterface) {
   const opened = await $.ui.open({ id: PANE, title: 'Mission Control', columns: PANE_COLUMNS })
   if (!opened.isPlaced) $.ui.toast(`Mission Control: the pane did not open here (${(opened as any).reason ?? 'no room'})`)
 }
+
+/** Opens the pane on the Insights tab, or switches to it when the pane is already open. */
+async function openInsights($: EngineInterface) {
+  await update($, tab, () => 'insights' as Tab)
+  void readWeek($).catch(() => {})
+  const mine = (await $.ui.panes()).find(p => p.id === PANE)
+  if (mine && mine.isPlaced) return $.ui.invalidate('ui.render')
+  const opened = await $.ui.open({ id: PANE, title: 'Mission Control', columns: PANE_COLUMNS })
+  if (!opened.isPlaced) $.ui.toast(`Mission Control: the pane did not open here (${(opened as any).reason ?? 'no room'})`)
+}
+
+/** Insights already announced by a toast in this session. */
+const toldInsights = new Set<string>()
 
 const NODES = ['/opt/homebrew/bin/node', '/usr/local/bin/node', 'node']
 
@@ -225,9 +246,14 @@ let settings = settingsOf(undefined)
 
 function fuseFor($: EngineInterface): FuseOptions {
   return {
-    idleMs: settings.idleMs,
+    leadMs: settings.leadMs,
     minTokens: settings.minTokens,
     conversation: () => conversationNow($),
+    cache: async () => {
+      const l = await read($, live)
+      const end = cacheEnd(l)
+      return end === null ? null : { end, ttl: ttlOf(l) }
+    },
     onCompacted: async () => $.ui.invalidate('ui.render'),
   }
 }
@@ -247,7 +273,7 @@ export const register: Register = (on, options) => {
       await readBreakdown($)
       const kept = (await $.store.get(WEEK_KEY)) as Week | null
       if (kept && Number.isFinite(kept.at)) await update($, week, () => kept)
-      // The ⋯ card shows the week's Fable use: refresh a stale week in the background (local, no tokens).
+      // The details card shows the week's Fable use: refresh a stale week in the background (local, no tokens).
       void readWeek($).catch(() => {})
     } catch {
       // The strip fills in after the first answer.
@@ -272,6 +298,8 @@ export const register: Register = (on, options) => {
       turnInput = 0
       turnAgentUsd = 0
       turnCold = false
+      turnOut = 0
+      turnTools = 0
       firstStep = true
       await update($, live, x => ({ ...x, turnBase: x.usd }))
     }
@@ -284,15 +312,22 @@ export const register: Register = (on, options) => {
     const response = yield* next(e)
     if (!e.agentId) {
       const u: any = response?.usage
+      let ttl: number | undefined
       if (u) {
         const read = u.cache_read_input_tokens ?? 0
         const write = u.cache_creation_input_tokens ?? 0
         turnRead += read
         turnInput += read + write + (u.input_tokens ?? 0)
+        turnOut += u.output_tokens ?? 0
         if (firstStep && write > 50_000 && read < write) turnCold = true
+        // Which cache this request wrote: the 1-hour one, or the 5-minute one (as when usage runs over).
+        const w5 = u.cache_creation?.ephemeral_5m_input_tokens ?? 0
+        const w1 = u.cache_creation?.ephemeral_1h_input_tokens ?? 0
+        if (w1 > 0) ttl = CACHE_TTL
+        else if (w5 > 0) ttl = 5 * MINUTE
       }
       firstStep = false
-      await update($, live, x => ({ ...x, cacheAt: at, model: e.model || x.model }))
+      await update($, live, x => ({ ...x, cacheAt: at, cacheTtl: ttl ?? x.cacheTtl, model: e.model || x.model }))
     }
     return response
   })
@@ -305,6 +340,7 @@ export const register: Register = (on, options) => {
         const l = await read($, live)
         if (!l.mcpUsed.includes(server)) await update($, live, x => ({ ...x, mcpUsed: [...x.mcpUsed, server] }))
       }
+      if (!(e as any).agentId) turnTools++
       if (!(e as any).agentId && ran && ran.result !== undefined) {
         const w = weightOf(e.tool_use_id, e.tool, (e as any).input, ran.result)
         if (w) {
@@ -334,6 +370,9 @@ export const register: Register = (on, options) => {
         cached: turnInput ? turnRead / turnInput : 1,
         agentShare: usd > 0 ? Math.min(1, turnAgentUsd / usd) : 0,
         isCold: turnCold,
+        out: turnOut,
+        tools: turnTools,
+        model: l.model,
       }
       await update($, live, x => ({ ...x, turns: [...x.turns, turn].slice(-KEEP_TURNS), adds: [...x.adds, added].slice(-12) }))
 
@@ -341,8 +380,8 @@ export const register: Register = (on, options) => {
       if (s.telemetry && usd >= 0.01) {
         const bits = [seconds(e.durationMs), added ? '+' + tok(added) + ' payload' : '', money(usd), `${Math.round(turn.cached * 100)}% from cache`]
         if (turn.agentShare >= 0.2) bits.push(`subagents ${Math.round(turn.agentShare * 100)}%`)
-        if (turn.isCold) bits.push('cold orbit')
-        $.ui.log('◆ Telemetry · ' + bits.filter(Boolean).join(' · '))
+        if (turn.isCold) bits.push('cache had expired')
+        $.ui.log('◆ ' + bits.filter(Boolean).join(' · '))
       }
 
       // Budget: said once per session.
@@ -350,11 +389,17 @@ export const register: Register = (on, options) => {
       if (s.budget > 0 && after.usd !== null && !after.budgetWarned) {
         if (after.usd >= s.budget) {
           await update($, live, x => ({ ...x, budgetWarned: true }))
-          $.ui.toast(`Mission Control: mission budget passed, this session is at ${money(after.usd)}`)
+          $.ui.toast(`Mission Control: this session has cost ${money(after.usd)}, over your ${money(s.budget)} budget`)
         }
       }
       const top = movesOf(after, now, s)[0]
-      if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Mission Control: ${top.title.toLowerCase()} · ${tipOf(top)}`)
+      if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Mission Control: ${tipOf(top)}`)
+      // A model that does not fit the work is said once per session; the rest waits in Insights.
+      const fit = insightsOf(after, await read($, week)).find(i => i.kind === 'model' && i.tone !== 'calm' && !toldInsights.has(i.id))
+      if (fit) {
+        toldInsights.add(fit.id)
+        await toastOnce($, `Mission Control insight: ${fit.title} · press i`)
+      }
     } catch {
       // No reading this turn: the strip keeps the last one.
     }
@@ -415,11 +460,14 @@ export const register: Register = (on, options) => {
       live: l,
       week: await read($, week),
       move: movesOf(l, now, s)[0],
+      insights: insightsOf(l, await read($, week)).length,
       now,
       columns: Math.max(20, e.props.bodyColumns),
       desktop: e.surface === 'desktop',
-      onMove: () => void compactFromStrip($, fuseFor($)),
+      onMove: () => void compactFromStrip($),
+      isQueued: isCompactQueued,
       onOpen: () => void togglePane($),
+      onInsights: () => void openInsights($),
     })
     const below = await next(e)
     if (!strip) return below
@@ -433,6 +481,7 @@ export const register: Register = (on, options) => {
       tab: await read($, tab),
       live: l,
       moves: movesOf(l, now, s),
+      insights: insightsOf(l, await read($, week)),
       categories: await read($, categories),
       week: await read($, week),
       weekBusy: await read($, weekBusy),
@@ -445,7 +494,7 @@ export const register: Register = (on, options) => {
         if (t === 'week') void readWeek($)
         if (t === 'tank') void readBreakdown($).catch(() => {})
       },
-      compact: () => void compactFromStrip($, fuseFor($)),
+      compact: () => void compactFromStrip($),
       readWeek: () => void readWeek($, true),
     })
   })
@@ -457,12 +506,12 @@ export const register: Register = (on, options) => {
     if (!w || !below) return below
     const { Box, Text } = $.ui.resolve(e)
     const text = w.isAgent
-      ? `◆ Probe (subagent) · ${tok(w.tokens)} tokens${w.ms ? ' · ' + seconds(w.ms) : ''}${w.usd ? ' · ≈ ' + money(w.usd) : ''}${w.model ? ' · ' + w.model.replace(/^claude-/, '') : ''}`
-      : `◆ Heavy cargo · ${tok(w.tokens)} now on board: every later request re-reads it`
+      ? `◆ Subagent · ${tok(w.tokens)} tokens${w.ms ? ' · ' + seconds(w.ms) : ''}${w.usd ? ' · ≈ ' + money(w.usd) : ''}${w.model ? ' · ' + w.model.replace(/^claude-/, '') : ''}`
+      : `◆ Large output · ${tok(w.tokens)} tokens now in context: every later message sends them again`
     return Box({ flexDirection: 'column', children: [below, Text({ key: 'w', color: w.isAgent ? '#b866e6' : '#e0a030', children: text })] })
   })
 
-  // The best move as the empty prompt's hint.
+  // The best suggestion as the empty prompt's hint.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.props.isDraft || e.props.isWorking) return next(e)
     const l = await read($, live)

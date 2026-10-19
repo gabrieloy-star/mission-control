@@ -1,7 +1,7 @@
 {
   "name": "mission-control",
   "version": "1.0.0",
-  "description": "Mission Control: one instrument strip above the prompt (tank, fuse, race, spend) that always ends with the move that saves the most tokens right now, and a side pane of moves. Reads only figures Claude already reports: it costs no tokens to watch.",
+  "description": "Mission Control: one strip above the prompt (context, prompt cache, usage limits, session cost) that ends with the suggestion that saves the most right now, a side pane with the details, and insights on model fit and good habits. Reads only figures Claude already reports: it costs no tokens to watch.",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Gabriel"
@@ -13,24 +13,31 @@
       "description": "One toast when a session passes this amount in US dollars. 0 turns it off.",
       "default": 100
     },
-    "idleMinutes": {
+    "minSaving": {
       "type": "number",
-      "title": "Idle minutes before compacting",
-      "description": "Compacts an idle session this many minutes after its last request, before the 1-hour prompt cache cools. 0 turns it off.",
-      "default": 50,
+      "title": "Smallest saving worth suggesting",
+      "description": "Suggestions that save less than this many US dollars over an hour of work are not shown.",
+      "default": 1,
+      "min": 0
+    },
+    "minutesBeforeExpiry": {
+      "type": "number",
+      "title": "Idle compact: minutes before the cache expires",
+      "description": "When a session is idle, compact it this many minutes before its 1-hour prompt cache expires. 0 turns idle compact off.",
+      "default": 5,
       "min": 0
     },
     "minTokens": {
       "type": "number",
       "title": "Smallest conversation worth compacting",
-      "description": "Below this many conversation tokens a cold return is cheap, so nothing is compacted.",
+      "description": "Idle compact leaves conversations smaller than this many tokens alone: resending them is cheap.",
       "default": 40000,
       "min": 0
     },
     "telemetry": {
       "type": "boolean",
-      "title": "Telemetry line after each answer",
-      "description": "A dim line under each answer with its time, payload added, cost and cache share. The Flight log tab has the same figures.",
+      "title": "Cost line after each answer",
+      "description": "A dim line under each answer with its time, context added, cost and cache share. The Session tab has the same figures.",
       "default": false
     }
   }

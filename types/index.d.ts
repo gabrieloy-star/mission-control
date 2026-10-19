@@ -14,8 +14,14 @@ export type Turn = {
   cached: number
   /** Share of its cost spent by subagents, 0 to 1. */
   agentShare: number
-  /** True when its first request found the cache cold and wrote the context again. */
+  /** True when its first request found the cache expired and wrote the context again. */
   isCold: boolean
+  /** Output tokens the main loop wrote. */
+  out?: number
+  /** Tool calls the main loop made. */
+  tools?: number
+  /** The model that answered. */
+  model?: string
 }
 
 /** A heavy tool output or a subagent run: what the weight under its row shows. */
@@ -44,8 +50,10 @@ export type Live = {
   conversation: number | null
   /** Tokens each recent turn added, oldest first. */
   adds: number[]
-  /** Start of the last main-loop request: the prompt cache's hour runs from here. */
+  /** Start of the last main-loop request: the prompt cache's lifetime runs from here. */
   cacheAt: number | null
+  /** How long the prompt cache lives: 1 hour, or 5 minutes when Claude writes the short cache. */
+  cacheTtl?: number
   model: string
   limits: Limit[]
   usd: number | null
@@ -61,7 +69,7 @@ export type Live = {
   lastToastAt: number
 }
 
-export type Tab = 'moves' | 'tank' | 'session' | 'week'
+export type Tab = 'moves' | 'tank' | 'session' | 'week' | 'insights'
 
 /** Tokens by kind, as the week scanner sums them. */
 export type Tokens = { input: number; output: number; read: number; write5m: number; write1h: number }

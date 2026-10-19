@@ -1,10 +1,11 @@
-// The strip above the prompt: payload, orbit, fuel, mission cost, and the next maneuver.
+// The strip above the prompt: context, prompt cache, usage limits, session cost, the suggestion
+// and two buttons: insights and the full pane.
 // Pure drawing. It measures every part in cells and keeps the most important ones that fit
 // `bodyColumns`, so it is always one line. Desktop draws the gauges as small SVGs; the
 // terminal draws them with glyphs.
 
 import type { Limit, Live, Week } from '../types'
-import { FUSE_WARN, HEAVY_AT, HOUR, clockOf, fuseLeft, money, span, tok } from './moves'
+import { HEAVY_AT, HOUR, cacheEnd, cacheLeft, cacheWarnAt, clockOf, money, savingOf, span, tok, ttlOf } from './moves'
 import type { Move } from './moves'
 import { sumTokens, tokensUsd } from './prices'
 
@@ -30,19 +31,24 @@ type Part = { key: string; rank: number; cells: number; draw: () => unknown[]; t
 
 export type StripInput = {
   live: Live
-  /** The last 7 days, when History has read them: the ⋯ card's Fable line. */
+  /** The last 7 days, when History has read them: the details card's Fable line. */
   week: Week | null
   move: Move | undefined
+  /** How many insights are open: the count on the insights button. */
+  insights: number
   now: number
   columns: number
   desktop: boolean
   onMove: () => void
+  /** A compaction is queued: the button says so until it runs. */
+  isQueued?: boolean
   onOpen: () => void
+  onInsights: () => void
 }
 
 // ---------- Gauges ----------
 
-/** The tank's scale: the window compaction is measured against; the notch at 85% of it. */
+/** The context gauge's scale: the window compaction is measured against; the mark at 85% of it. */
 function tankScale(live: Live) {
   return { scale: live.window || HEAVY_AT, notch: 0.85 }
 }
@@ -73,14 +79,14 @@ function tankSvg(live: Live): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${h}" viewBox="0 0 ${width} ${h}">${rects}</svg>`
 }
 
-function fuseState(left: number) {
-  return left <= 0 ? 'hot' : left < FUSE_WARN ? 'warn' : 'calm'
+function fuseState(left: number, warn: number) {
+  return left <= 0 ? 'hot' : left < warn ? 'warn' : 'calm'
 }
 
-function fuseSvg(left: number): string {
+function fuseSvg(left: number, ttl: number, warn: number): string {
   const W = 52, H = 12
-  const color = TONE[fuseState(left)]!
-  const x = Math.max(4, Math.min(1, left / HOUR) * (W - 8) + 4)
+  const color = TONE[fuseState(left, warn)]!
+  const x = Math.max(4, Math.min(1, left / ttl) * (W - 8) + 4)
   const burnt = `<line x1="${x}" y1="6" x2="${W - 1}" y2="6" stroke="${INK.grey}" stroke-width="1.2" stroke-dasharray="1.5 2.5" opacity="0.7"/>`
   if (left <= 0) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${burnt}<path d="M1.5 2 L8.5 10 M8.5 2 L1.5 10" stroke="${INK.coral}" stroke-width="1.8" stroke-linecap="round"/></svg>`
@@ -104,7 +110,7 @@ export function raceOf(limit: Limit, now: number) {
   return { label: LABELS[limit.kind] ?? limit.kind, used, clock, tone, left }
 }
 
-/** Fuel left as the bar, time left in the window as the ring. */
+/** Usage left as the bar, time left in the window as the ring. */
 function raceSvg(used: number, clock: number | null, tone: string): string {
   const W = 40, H = 10
   const xu = 3 + ((100 - used) / 100) * (W - 6)
@@ -129,7 +135,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
   const desktop = s.desktop && !!Svg
   const parts: Part[] = []
 
-  // Tank
+  // Context
   if (live.tokens !== null) {
     const value = tok(live.tokens)
     const add = live.adds[live.adds.length - 1] ?? 0
@@ -138,8 +144,8 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     parts.push({
       key: 'tank', rank: 1, cells: gauge + 1 + value.length + (addText ? 1 + addText.length : 0),
       tip: [
-        `Payload: ${value} of ${tok(live.window)} on board (${Math.round(((live.tokens ?? 0) / (live.window || 1)) * 100)}%)`,
-        'Everything Claude re-reads on every request: the context',
+        `Context: ${value} of ${tok(live.window)} tokens (${Math.round(((live.tokens ?? 0) / (live.window || 1)) * 100)}%)`,
+        'Everything Claude sends with every message',
         live.fixed !== null ? `Grey: ${tok(live.fixed)} of instructions, tools and memory` : '',
         'Blue: your conversation · bright: what the last message added',
         'Red line at 85%: past it, compacting pays off',
@@ -165,21 +171,23 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     })
   }
 
-  // Fuse
-  const left = fuseLeft(live, now)
+  // Prompt cache
+  const left = cacheLeft(live, now)
   if (left !== null) {
-    const state = fuseState(left)
+    const ttl = ttlOf(live)
+    const warn = cacheWarnAt(live)
+    const state = fuseState(left, warn)
     const value = span(left)
     parts.push({
       key: 'fuse', rank: 3, cells: (desktop ? cellsOf(52) : 7) + 1 + value.length,
       tip: left > 0
-        ? `Orbit: the prompt cache stays warm until ${clockOf(live.cacheAt! + HOUR)}\nIn orbit, each message re-reads the payload at a fraction of the price\nIf it decays, the next message pays to write everything again`
-        : 'Orbit decayed: the prompt cache is cold\nThe next message pays to write the whole payload again\nCompact first, or launch a fresh thread',
+        ? `Prompt cache: valid until ${clockOf(cacheEnd(live)!)} (${ttl >= HOUR ? '1-hour' : '5-minute'} cache)\nWhile it lasts, each message reads the context at a fraction of the price\nAfter it expires, the next message pays full price to send it all again`
+        : 'Prompt cache expired\nThe next message pays full price to send the whole context again\nCompact first, or start a new session',
       draw: () => {
         const out: unknown[] = []
-        if (desktop) out.push(Svg({ key: 'g', source: fuseSvg(left), width: 52, height: 12, alt: `Prompt cache: ${value} left` }))
+        if (desktop) out.push(Svg({ key: 'g', source: fuseSvg(left, ttl, warn), width: 52, height: 12, alt: `Prompt cache: ${value} left` }))
         else {
-          const r = left <= 0 ? 0 : Math.max(1, Math.round((left / HOUR) * 6))
+          const r = left <= 0 ? 0 : Math.max(1, Math.min(6, Math.round((left / ttl) * 6)))
           const glyph = left <= 0 ? '✕' + '┄'.repeat(6) : '━'.repeat(r - 1) + '✦' + '┄'.repeat(7 - r)
           out.push(Text({ key: 'g', color: TERM[state], children: glyph }))
         }
@@ -189,7 +197,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     })
   }
 
-  // Race: 5h, then 7d
+  // Usage limits: 5 hours, then 7 days
   live.limits.forEach((limit, i) => {
     const r = raceOf(limit, now)
     if (r.left !== null && r.left <= 0) return
@@ -197,14 +205,14 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     parts.push({
       key: 'race-' + limit.kind, rank: limit.kind === 'five_hour' ? 5 : 6 + i, cells: r.label.length + 1 + (desktop ? cellsOf(40) : 6) + 1 + value.length,
       tip: [
-        `Fuel ${limit.kind === 'five_hour' ? '5-hour' : limit.kind === 'seven_day' ? '7-day' : r.label}: ${value} of your usage limit left`,
-        r.clock !== null ? `Ring: ${Math.max(0, 100 - Math.round(r.clock))}% of the time window left` : '',
-        'Fuel below the ring: you are burning faster than the clock',
-        r.left !== null ? `Refuels in ${span(r.left)}` : '',
+        `${limit.kind === 'five_hour' ? '5-hour' : limit.kind === 'seven_day' ? 'Weekly' : r.label} usage limit: ${value} left`,
+        r.clock !== null ? `Ring: ${Math.max(0, 100 - Math.round(r.clock))}% of the time left` : '',
+        'Bar behind the ring: you are using it faster than time passes',
+        r.left !== null ? `Resets in ${span(r.left)}` : '',
       ].filter(Boolean).join('\n'),
       draw: () => {
         const out: unknown[] = [Text({ key: 'l', dimColor: true, children: r.label })]
-        if (desktop) out.push(Svg({ key: 'g', source: raceSvg(r.used, r.clock, r.tone), width: 40, height: 10, alt: `Fuel ${r.label}: ${value} left` }))
+        if (desktop) out.push(Svg({ key: 'g', source: raceSvg(r.used, r.clock, r.tone), width: 40, height: 10, alt: `Usage limit ${r.label}: ${value} left` }))
         else {
           const u = Math.round(((100 - r.used) / 100) * 6)
           const c = r.clock === null ? -1 : Math.min(5, Math.round(((100 - r.clock) / 100) * 6))
@@ -218,31 +226,42 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     })
   })
 
-  // Spend
+  // Session cost
   if (live.usd !== null && live.usd >= 0.005) {
     const value = money(live.usd)
     const lastTurn = live.turns[live.turns.length - 1]
-    const delta = lastTurn && lastTurn.usd >= 0.005 ? '+' + money(lastTurn.usd).replace(/^\$|^R\$ /, '') : ''
+    const delta = lastTurn && lastTurn.usd >= 0.005 ? '+' + money(lastTurn.usd).replace(/^\$/, '') : ''
     parts.push({
       key: 'spend', rank: 4, cells: value.length + (delta ? 1 + delta.length : 0),
-      tip: `Mission cost so far: ${value}${delta ? '\nLast message: +' + delta.replace(/^\+/, '') : ''}\nAt list prices: on a subscription it is an equivalent, not a bill`,
+      tip: `Session cost so far: ${value}${delta ? '\nLast message: +$' + delta.replace(/^\+/, '') : ''}\nAt API list prices: on a subscription it is an equivalent, not a bill`,
       draw: () => [Text({ key: 'v', bold: true, children: value }), ...(delta ? [Text({ key: 'd', dimColor: true, children: delta })] : [])],
     })
   }
 
-  // The move
+  // The suggestion
   const move = s.move
-  const long = move ? `${move.short}${move.usd > 0.01 ? ' · saves ≈ ' + money(move.usd) + (move.unit === 'now' ? '' : ' ' + move.unit) : ''}` : 'nominal'
-  const short = move ? `${move.short}${move.usd > 0.01 && move.unit === 'now' ? ' ' + money(move.usd) : ''}` : 'nominal'
+  const long = move ? `${move.short}${move.usd > 0.01 ? ' · saves ' + money(move.usd) + (move.unit === 'now' ? '' : ' ' + move.unit) : ''}` : 'all good'
+  const short = move ? `${move.short}${move.usd > 0.01 && move.unit === 'now' ? ' ' + money(move.usd) : ''}` : 'all good'
   const moveCells = (label: string) => label.length + (move?.key ? 7 : 2)
   const drawMove = (label: string) => () => {
     if (!move) return [Text({ key: 'm', color: INK.mint, children: '✓ ' + label })]
+    if (move.key && s.isQueued) return [Text({ key: 'm', color: INK.amber, children: '◆ compaction queued' })]
     if (move.key) return [Button({ key: 'move', label, hotkey: move.key, variant: 'primary', onPress: s.onMove })]
     return [Text({ key: 'm', color: TONE[move.tone], children: '◆ ' + label })]
   }
-  const moveTip = move ? `Next maneuver: ${move.title}\n${move.how}` : 'All systems nominal\nPayload, orbit and fuel are steady: nothing to change'
+  const moveTip = move
+    ? `Suggestion: ${move.title}\n${move.how}${savingOf(move) ? '\nSaves' + savingOf(move).replace(' · saves', '') : ''}`
+    : 'All good\nNothing worth changing right now'
   parts.push({ key: 'move', rank: 2, cells: moveCells(long), draw: drawMove(long), tip: moveTip })
-  parts.push({ key: 'open', rank: 1.5, cells: 5, draw: () => [Button({ key: 'open', label: '⋯', hotkey: 'o', onPress: s.onOpen })], card: statusCard(s) })
+  const insightLabel = s.insights ? `insights ${s.insights}` : 'insights'
+  parts.push({
+    key: 'insights', rank: 2.5, cells: insightLabel.length + 7,
+    draw: () => [Button({ key: 'insights', label: insightLabel, hotkey: 'i', plain: true, onPress: s.onInsights })],
+    tip: s.insights
+      ? `Insights: ${s.insights} for this session\nWhether your model fits the work, and habits that keep sessions cheap\nClick or press i`
+      : 'Insights\nWhether your model fits the work, and habits that keep sessions cheap\nClick or press i',
+  })
+  parts.push({ key: 'open', rank: 1.5, cells: 11, draw: () => [Button({ key: 'open', label: 'details', hotkey: 'o', onPress: s.onOpen })], card: statusCard(s) })
 
   // Fit: keep parts by rank while they fit; a long move label gives way to the short one first.
   const fit = (list: Part[]) => {
@@ -262,7 +281,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     const shorter = parts.map(p => (p.key === 'move' ? { ...p, cells: moveCells(short), draw: drawMove(short) } : p))
     kept = fit(shorter)
   }
-  const order = ['tank', 'fuse', 'race-five_hour', 'race-seven_day', 'spend', 'move', 'open']
+  const order = ['tank', 'fuse', 'race-five_hour', 'race-seven_day', 'spend', 'move', 'insights', 'open']
   kept.sort((a, b) => (order.indexOf(a.key) + 99) % 99 - (order.indexOf(b.key) + 99) % 99)
 
   return Box({
@@ -292,29 +311,29 @@ export function familyWeek(w: Week, family: string) {
   return { tokens, usd }
 }
 
-/** The ⋯ card: this flight, both fuel windows with their refuel time, and the week's Fable use. */
+/** The details card: this session, both usage limits with their reset time, and the week's Fable use. */
 export function statusCard(s: StripInput): Card {
   const { live, now } = s
   const rows: CardRow[] = []
   const model = live.model.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1')
   const elapsed = live.startedAt ? span(now - live.startedAt) : ''
   rows.push({ label: 'This session', value: [elapsed, model, live.usd !== null ? money(live.usd) : ''].filter(Boolean).join(' · ') })
-  const names: Record<string, string> = { five_hour: 'Fuel · 5 hours', seven_day: 'Fuel · 7 days', spend_limit: 'Spend limit' }
+  const names: Record<string, string> = { five_hour: '5-hour limit', seven_day: 'Weekly limit', spend_limit: 'Spend limit' }
   for (const limit of live.limits) {
     const r = raceOf(limit, now)
     const left = Math.max(0, 100 - Math.round(r.used))
-    const refuel = r.left !== null && r.left > 0 ? ` · refuels in ${span(r.left)}` : ''
+    const refuel = r.left !== null && r.left > 0 ? ` · resets in ${span(r.left)}` : ''
     rows.push({ label: names[limit.kind] ?? limit.kind, value: `${left}% left${refuel}`, color: r.tone === 'calm' ? undefined : TONE[r.tone] })
   }
-  if (!live.limits.length) rows.push({ label: 'Fuel: Claude reports your limits after the next message' })
+  if (!live.limits.length) rows.push({ label: 'Usage limits: Claude reports them after the next message' })
   if (s.week) {
     const fable = familyWeek(s.week, 'fable')
     rows.push({ label: 'Fable · 7 days', value: fable.tokens ? `${tok(fable.tokens)} · ≈ ${money(fable.usd)}` : 'not used' })
   } else {
     rows.push({ label: 'Fable · 7 days: reading the week…' })
   }
-  rows.push({ label: 'Press O for the full Mission Control' })
-  return { title: 'Mission status', rows, isRight: true }
+  rows.push({ label: 'Click details (or press O) to open the Mission Control panel' })
+  return { title: 'Session status', rows, isRight: true }
 }
 
 function richCard(el: any, card: Card) {
