@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mission Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Figtree:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* One-pager for the README: the artifact's spec-sheet look, built around real captures of the mod in Claude. */
+:root {
+  --bg: #0d1017; --bg-2: #131823; --panel: #191f2c; --line: #273041; --line-2: #354055;
+  --fg: #e8ebf1; --fg-2: #aab2c2; --fg-3: #707b90;
+  --cobalt: #6f9bff; --cobalt-soft: rgba(111, 155, 255, .16);
+  --amber: #f2b33d; --coral: #ff6f61; --mint: #4fd1a1; --mint-soft: rgba(79, 209, 161, .14); --orchid: #d67cff;
+  --display: "Big Shoulders Display", "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "Figtree", "Avenir Next", "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15.5px; line-height: 1.55; }
+.wrap { width: 1200px; margin: 0 auto; padding: 56px 48px 64px; display: grid; gap: 72px; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-family: var(--display); font-weight: 900; font-size: 112px; line-height: .86; text-transform: uppercase; }
+h2 { font-family: var(--display); font-weight: 800; font-size: 50px; line-height: .95; text-transform: uppercase; }
+h3 { font-size: 17px; font-weight: 700; line-height: 1.25; }
+.tag { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-3); }
+.lede { font-size: 19px; color: var(--fg-2); max-width: 62ch; }
+section { display: grid; gap: 26px; }
+.head { display: grid; gap: 10px; }
+.shot { display: block; width: 100%; border-radius: 12px; border: 1px solid var(--line); }
+
+/* Hero */
+.hero { display: grid; gap: 24px; }
+.hero-top { display: flex; justify-content: space-between; align-items: end; gap: 32px; }
+.zero { display: grid; justify-items: end; gap: 2px; font-family: var(--mono); font-size: 12.5px; color: var(--mint); text-align: right; white-space: nowrap; }
+.zero b { font-family: var(--display); font-size: 64px; font-weight: 900; line-height: .9; }
+.hero-strip { background: radial-gradient(120% 140% at 0% 0%, var(--cobalt-soft), transparent 55%), var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 30px 28px 24px; display: grid; gap: 16px; }
+.hero-strip .shot { border: 0; }
+.caption { font-family: var(--mono); font-size: 12px; color: var(--fg-3); }
+
+/* Anatomy */
+.anatomy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.part { background: var(--panel); padding: 20px; display: grid; gap: 8px; align-content: start; }
+.part .nm { font-family: var(--display); font-size: 28px; font-weight: 900; text-transform: uppercase; line-height: 1; }
+.part p { font-size: 14.5px; color: var(--fg-2); }
+.cobalt { color: var(--cobalt); } .mint { color: var(--mint); } .amber { color: var(--amber); } .coral { color: var(--coral); } .orchid { color: var(--orchid); }
+
+/* Hover cards */
+.tips { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.tip { display: grid; gap: 10px; }
+.tip .shot { border-radius: 10px; }
+.tip p { font-size: 14px; color: var(--fg-2); }
+.tip b { color: var(--fg); }
+
+/* Pane */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.tab { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: grid; gap: 14px; align-content: start; }
+.tab .t { display: flex; align-items: baseline; gap: 12px; }
+.tab .n { font-family: var(--mono); font-size: 12px; color: var(--bg); background: var(--fg); border-radius: 5px; padding: 1px 7px; font-weight: 600; }
+.tab h3 { font-family: var(--display); font-size: 30px; font-weight: 900; text-transform: uppercase; line-height: 1; }
+.tab p { font-size: 14.5px; color: var(--fg-2); }
+.tab .shot { border-radius: 10px; }
+
+/* Bottom */
+.duo { display: grid; grid-template-columns: 1.1fr .9fr; gap: 22px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px; display: grid; gap: 14px; align-content: start; }
+.card p { color: var(--fg-2); }
+.fuse { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.fuse div { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.fuse b { font-family: var(--display); font-size: 30px; font-weight: 900; line-height: 1; }
+.fuse span { font-size: 13px; color: var(--fg-3); }
+pre { margin: 0; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font: 13.5px/1.7 var(--mono); color: var(--fg); white-space: pre-wrap; }
+.dim { color: var(--fg-3); }
+.foot { display: flex; justify-content: space-between; gap: 24px; font-size: 13.5px; color: var(--fg-3); border-top: 1px solid var(--line); padding-top: 22px; }
+.foot b { color: var(--fg-2); font-weight: 600; }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <header class="hero">
+    <div class="hero-top">
+      <div class="head">
+        <span class="tag">A Claude Code mod</span>
+        <h1>Mission<br>Control</h1>
+      </div>
+      <div class="zero"><b>0 tokens</b>to watch: it reads only what Claude already reports</div>
+    </div>
+    <p class="lede">See where your tokens go, and the one move that saves the most right now. One strip above the prompt, one side pane, and an automatic compact before the cache goes cold.</p>
+    <div class="hero-strip">
+      <img class="shot" src="img/strip.png" alt="The Mission Control strip above the Claude Code prompt">
+      <span class="caption">The strip, as it shows in Claude: payload · cache orbit · fuel for 5 hours and 7 days · spend · next move · ⋯</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="head">
+      <span class="tag">The strip</span>
+      <h2>Five instruments and a move</h2>
+    </div>
+    <div class="anatomy">
+      <div class="part"><span class="nm cobalt">Payload</span><p>What rides on every request against the model's window. Grey is fixed weight, blue your conversation, a red line at 85% marks where compacting pays off.</p></div>
+      <div class="part"><span class="nm mint">Orbit</span><p>Minutes left before the prompt cache cools. Warm, each message re-reads the payload at a fraction of the price. Cold, it pays to write it all again.</p></div>
+      <div class="part"><span class="nm amber">Fuel</span><p>Usage left in the 5-hour and 7-day limits, raced against the clock. Fuel below the ring means you burn faster than time passes.</p></div>
+      <div class="part"><span class="nm">Spend</span><p>What the session has cost so far, and what the last message added, in dollars or reais.</p></div>
+      <div class="part"><span class="nm mint">Next move</span><p>The single action that saves the most right now, with a button to run it. <span class="mint">✓ nominal</span> means nothing needs doing.</p></div>
+      <div class="part"><span class="nm">⋯ Status</span><p>Hover for session time, both fuel windows with their refuel times, and your Fable use this week. Click or press <b>O</b> for the pane.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <span class="tag">Hover any instrument</span>
+      <h2>Every number explains itself</h2>
+    </div>
+    <div class="tips">
+      <div class="tip"><img class="shot" src="img/tip-payload.png" alt="Payload tooltip"><p><b>Payload.</b> How much is on board and what it is made of.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-orbit.png" alt="Orbit tooltip"><p><b>Orbit.</b> The exact time the cache stays warm until.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-fuel.png" alt="Fuel tooltip"><p><b>Fuel.</b> Usage left, time left in the window, and when it refuels.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-status.png" alt="Mission status card"><p><b>Mission status.</b> The whole picture in one card, Fable included.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <span class="tag">The side pane · /mission</span>
+      <h2>Four tabs, one question: where did it go?</h2>
+    </div>
+    <div class="tabs">
+      <div class="tab"><div class="t"><span class="n">1</span><h3>Maneuvers</h3></div><p>Every saving move available now, ranked by money saved. Compact now works even mid-answer: it waits in line and runs when Claude finishes.</p><img class="shot" src="img/maneuvers.png" alt="Maneuvers tab"></div>
+      <div class="tab"><div class="t"><span class="n">2</span><h3>Payload</h3></div><p>What every request carries, by category, and which MCP servers sit idle but still weigh on every message.</p><img class="shot" src="img/payload.png" alt="Payload tab"></div>
+      <div class="tab"><div class="t"><span class="n">3</span><h3>Flight log</h3></div><p>The cost of each message in this session, which ones were mostly subagents, and which hit a cold cache.</p><img class="shot" src="img/flight-log.png" alt="Flight log tab"></div>
+      <div class="tab"><div class="t"><span class="n">4</span><h3>History</h3></div><p>The last 7 days across your projects: tokens, equivalent cost, cache share, who spent it, and lessons to apply.</p><img class="shot" src="img/history.png" alt="History tab"></div>
+    </div>
+  </section>
+
+  <section class="duo">
+    <div class="card">
+      <span class="tag">Idle compact</span>
+      <h2>Leave. Come back cheap.</h2>
+      <p>A large session left alone is compacted a few minutes before its 1-hour cache cools. The next message pays for a short summary instead of rewriting the whole conversation.</p>
+      <div class="fuse">
+        <div><b class="mint">50 min</b><span>after the last message</span></div>
+        <div><b>40k</b><span>smallest worth compacting</span></div>
+        <div><b class="amber">1 h</b><span>before the cache cools</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <span class="tag">Install</span>
+      <h2>Two commands</h2>
+      <pre><span class="dim">In Claude Code:</span>
+/plugin marketplace add gabrieloy-star/mission-control
+/plugin install mission-control@gabriel-mods</pre>
+      <p>Then open a new session. Currency, budget and idle timing live in the plugin's settings.</p>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span><b>Mission Control</b> · reads only what Claude Code already reports, sends nothing anywhere</span>
+    <span>With thanks to Chris Han, David Roberts, Eric Cologni and Anthropic</span>
+  </footer>
+
+</main>
+</body>
+</html>
