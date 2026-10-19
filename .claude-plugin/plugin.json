@@ -5,6 +5,11 @@
   "license": "MIT",
   "icon": "./.claude-plugin/icon.png",
   "repository": "https://github.com/gabrieloy-star/usage-coach",
+  "homepage": "https://github.com/gabrieloy-star/usage-coach",
+  "documentationUrl": "https://github.com/gabrieloy-star/usage-coach#readme",
+  "supportUrl": "https://github.com/gabrieloy-star/usage-coach/issues",
+  "privacyPolicyUrl": "https://github.com/gabrieloy-star/usage-coach/blob/main/PRIVACY.md",
+  "termsOfServiceUrl": "https://github.com/gabrieloy-star/usage-coach/blob/main/TERMS.md",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Gabriel"
