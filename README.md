@@ -89,6 +89,34 @@ Change these with `/plugin configure usage-coach@gabriel-mods`.
 | Smallest conversation worth compacting | 40,000 tokens | Below this, idle compact does nothing. |
 | Cost line after each answer | off | A dim line under each answer with its figures. The Session tab already has them. |
 
+## What it reads, runs and sends
+
+Usage Coach sends nothing anywhere. It makes no network requests and never calls the model on its own. Everything below stays on your machine.
+
+**What it reads**
+
+- Session figures Claude Code reports (`session.usage`, `session.measure`): context size, cost at list prices, usage limits, the prompt cache.
+- The token counts of each request (`turn.step`): input, output and cache figures only, never the text.
+- Tool calls as they finish (`tool.call`): the tool name, its command or file path (for labels), whether it failed, and the size of its output. It never blocks or changes a call.
+- The first 60 characters of each request you type (`turn.start`), kept in the session's local state to label the cost per task. They are not logged, saved to disk or shown in notices.
+- Compactions (`session.compact`): the token counts before and after, to update the strip and count what was saved. It never changes a compaction.
+- For the History tab, your local Claude Code transcripts in `~/.claude/projects`: only token counts, model names, timestamps and project folder names.
+
+**What it runs**
+
+- `node scripts/week.mjs --days 7 --prev`, from the plugin's own folder, to sum the last 14 days of the transcripts above. It tries `/opt/homebrew/bin/node`, then `/usr/local/bin/node`, then `node` on your PATH. It runs when a session starts (at most once every 2 hours), when you open History or Insights, and when you press Reload history. The script only reads files and prints a summary for the pane; it sends nothing.
+
+**Slash commands it runs**
+
+- `/compact`, only when you click **compact** in the strip or **Compact now** in the pane. It queues if Claude is answering and runs when the answer ends.
+- Idle compact: when a session with 40,000 tokens or more of conversation has been quiet, it compacts 5 minutes before the 1-hour prompt cache expires. Turn it off with the setting "Idle compact: minutes before the cache expires" set to 0.
+
+Both compactions go through Claude Code itself, on your own account, like typing `/compact`.
+
+**What it adds**
+
+- The `/usage-coach` command, answered locally (it opens the pane and costs no tokens).
+
 ## Install
 
 In Claude Code:
