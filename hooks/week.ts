@@ -3,7 +3,6 @@
 import type { Tokens, Week } from '../types'
 import { rewriteUsd, sumTokens, tokensUsd } from './prices'
 import { money, tok } from './moves'
-import type { Money } from './moves'
 
 export type WeekSummary = {
   tokens: number
@@ -26,7 +25,7 @@ function fold(byModel: Record<string, Tokens>) {
   return { tokens, usd, read, input }
 }
 
-export function summarize(w: Week, m: Money): WeekSummary {
+export function summarize(w: Week): WeekSummary {
   const main = fold(w.main)
   const sub = fold(w.sub)
   const tokens = main.tokens + sub.tokens
@@ -42,11 +41,11 @@ export function summarize(w: Week, m: Money): WeekSummary {
     const types = Object.entries(w.agentTypes).sort((a, b) => b[1].tokens - a[1].tokens)
     const top = types[0]
     const per = top ? top[1].tokens / Math.max(1, top[1].runs) : 0
-    lessons.push(`Probes (subagents) spent ${Math.round(subShare * 100)}% (${money(sub.usd, m)}).` +
+    lessons.push(`Probes (subagents) spent ${Math.round(subShare * 100)}% (${money(sub.usd)}).` +
       (top ? ` ${top[0]} ran ${top[1].runs} times at ${tok(per)} each: give searches to Explore and keep briefs narrow.` : ''))
   }
   if (w.cold.count >= 10) {
-    lessons.push(`${w.cold.count} times a context over 100k was written again after going cold (≈ ${money(coldUsd, m)}). Compact or close before breaks over an hour.`)
+    lessons.push(`${w.cold.count} times a context over 100k was written again after going cold (≈ ${money(coldUsd)}). Compact or close before breaks over an hour.`)
   }
   if (readShare >= 0.9) lessons.push(`${Math.round(readShare * 100)}% of input was read from the cache. Keep doing this.`)
   else lessons.push(`Only ${Math.round(readShare * 100)}% of input came from the cache: long pauses and model switches break it.`)

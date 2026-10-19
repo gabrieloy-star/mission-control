@@ -5,7 +5,7 @@
 
 import type { Limit, Live, Week } from '../types'
 import { FUSE_WARN, HEAVY_AT, HOUR, clockOf, fuseLeft, money, span, tok } from './moves'
-import type { Money, Move } from './moves'
+import type { Move } from './moves'
 import { sumTokens, tokensUsd } from './prices'
 
 export const INK = {
@@ -33,7 +33,6 @@ export type StripInput = {
   /** The last 7 days, when History has read them: the ⋯ card's Fable line. */
   week: Week | null
   move: Move | undefined
-  money: Money
   now: number
   columns: number
   desktop: boolean
@@ -221,9 +220,9 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
 
   // Spend
   if (live.usd !== null && live.usd >= 0.005) {
-    const value = money(live.usd, s.money)
+    const value = money(live.usd)
     const lastTurn = live.turns[live.turns.length - 1]
-    const delta = lastTurn && lastTurn.usd >= 0.005 ? '+' + money(lastTurn.usd, s.money).replace(/^\$|^R\$ /, '') : ''
+    const delta = lastTurn && lastTurn.usd >= 0.005 ? '+' + money(lastTurn.usd).replace(/^\$|^R\$ /, '') : ''
     parts.push({
       key: 'spend', rank: 4, cells: value.length + (delta ? 1 + delta.length : 0),
       tip: `Mission cost so far: ${value}${delta ? '\nLast message: +' + delta.replace(/^\+/, '') : ''}\nAt list prices: on a subscription it is an equivalent, not a bill`,
@@ -233,8 +232,8 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
 
   // The move
   const move = s.move
-  const long = move ? `${move.short}${move.usd > 0.01 ? ' · saves ≈ ' + money(move.usd, s.money) + (move.unit === 'now' ? '' : ' ' + move.unit) : ''}` : 'nominal'
-  const short = move ? `${move.short}${move.usd > 0.01 && move.unit === 'now' ? ' ' + money(move.usd, s.money) : ''}` : 'nominal'
+  const long = move ? `${move.short}${move.usd > 0.01 ? ' · saves ≈ ' + money(move.usd) + (move.unit === 'now' ? '' : ' ' + move.unit) : ''}` : 'nominal'
+  const short = move ? `${move.short}${move.usd > 0.01 && move.unit === 'now' ? ' ' + money(move.usd) : ''}` : 'nominal'
   const moveCells = (label: string) => label.length + (move?.key ? 7 : 2)
   const drawMove = (label: string) => () => {
     if (!move) return [Text({ key: 'm', color: INK.mint, children: '✓ ' + label })]
@@ -299,7 +298,7 @@ export function statusCard(s: StripInput): Card {
   const rows: CardRow[] = []
   const model = live.model.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1')
   const elapsed = live.startedAt ? span(now - live.startedAt) : ''
-  rows.push({ label: 'This session', value: [elapsed, model, live.usd !== null ? money(live.usd, s.money) : ''].filter(Boolean).join(' · ') })
+  rows.push({ label: 'This session', value: [elapsed, model, live.usd !== null ? money(live.usd) : ''].filter(Boolean).join(' · ') })
   const names: Record<string, string> = { five_hour: 'Fuel · 5 hours', seven_day: 'Fuel · 7 days', spend_limit: 'Spend limit' }
   for (const limit of live.limits) {
     const r = raceOf(limit, now)
@@ -310,7 +309,7 @@ export function statusCard(s: StripInput): Card {
   if (!live.limits.length) rows.push({ label: 'Fuel: Claude reports your limits after the next message' })
   if (s.week) {
     const fable = familyWeek(s.week, 'fable')
-    rows.push({ label: 'Fable · 7 days', value: fable.tokens ? `${tok(fable.tokens)} · ≈ ${money(fable.usd, s.money)}` : 'not used' })
+    rows.push({ label: 'Fable · 7 days', value: fable.tokens ? `${tok(fable.tokens)} · ≈ ${money(fable.usd)}` : 'not used' })
   } else {
     rows.push({ label: 'Fable · 7 days: reading the week…' })
   }

@@ -7,23 +7,10 @@
     "name": "Gabriel"
   },
   "userConfig": {
-    "currency": {
-      "type": "string",
-      "title": "Currency",
-      "description": "Money in US dollars (USD) or Brazilian reais (BRL).",
-      "options": ["USD", "BRL"],
-      "default": "USD"
-    },
-    "brlPerUsd": {
-      "type": "number",
-      "title": "Reais per dollar",
-      "description": "Fixed exchange rate for BRL. No network lookup.",
-      "default": 5.4
-    },
     "budget": {
       "type": "number",
       "title": "Session budget",
-      "description": "One toast when a session passes this amount, in the chosen currency. 0 turns it off.",
+      "description": "One toast when a session passes this amount in US dollars. 0 turns it off.",
       "default": 100
     },
     "idleMinutes": {

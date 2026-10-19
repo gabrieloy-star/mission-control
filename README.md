@@ -63,9 +63,7 @@ Change these with `/plugin configure mission-control@gabriel-mods`.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| Currency | USD | Show money in US dollars or Brazilian reais. |
-| Reais per dollar | 5.4 | Fixed exchange rate for BRL. No network lookup. |
-| Session budget | 100 | One notice when a session passes this amount. 0 turns it off. |
+| Session budget | $100 | One notice when a session passes this amount in US dollars. 0 turns it off. |
 | Idle minutes before compacting | 50 | When idle compact fires. 0 turns it off. |
 | Smallest conversation worth compacting | 40,000 tokens | Below this, idle compact does nothing. |
 | Telemetry line after each answer | off | A dim line under each answer with its figures. The Flight log tab already has them. |

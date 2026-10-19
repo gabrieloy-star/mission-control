@@ -11,7 +11,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Category, Live, Tab, Tokens, Turn, Week, Weight } from '../types'
 import { HOUR, MINUTE, conversationOf, money, movesOf, seconds, tipOf, tok } from './moves'
-import type { Money, Settings } from './moves'
+import type { Settings } from './moves'
 import { sumTokens, tokensUsd } from './prices'
 import { drawStrip } from './strip'
 import { drawPane } from './pane'
@@ -59,12 +59,7 @@ const fuse = newFuse()
 
 function settingsOf(options: Record<string, unknown> | undefined): Settings & { idleMs: number; telemetry: boolean } {
   const o = options ?? {}
-  const m: Money = {
-    currency: o.currency === 'BRL' ? 'BRL' : 'USD',
-    brlPerUsd: typeof o.brlPerUsd === 'number' && o.brlPerUsd > 0 ? o.brlPerUsd : 5.4,
-  }
   return {
-    money: m,
     budget: typeof o.budget === 'number' && o.budget > 0 ? o.budget : 0,
     minTokens: typeof o.minTokens === 'number' && o.minTokens >= 0 ? o.minTokens : 40_000,
     idleMs: (typeof o.idleMinutes === 'number' && o.idleMinutes >= 0 ? o.idleMinutes : 50) * MINUTE,
@@ -344,7 +339,7 @@ export const register: Register = (on, options) => {
 
       // The ledger line, when turned on: a dim transcript row, never sent to the model.
       if (s.telemetry && usd >= 0.01) {
-        const bits = [seconds(e.durationMs), added ? '+' + tok(added) + ' payload' : '', money(usd, s.money), `${Math.round(turn.cached * 100)}% from cache`]
+        const bits = [seconds(e.durationMs), added ? '+' + tok(added) + ' payload' : '', money(usd), `${Math.round(turn.cached * 100)}% from cache`]
         if (turn.agentShare >= 0.2) bits.push(`subagents ${Math.round(turn.agentShare * 100)}%`)
         if (turn.isCold) bits.push('cold orbit')
         $.ui.log('◆ Telemetry · ' + bits.filter(Boolean).join(' · '))
@@ -353,14 +348,13 @@ export const register: Register = (on, options) => {
       // Budget: said once per session.
       const after = await read($, live)
       if (s.budget > 0 && after.usd !== null && !after.budgetWarned) {
-        const shown = s.money.currency === 'BRL' ? after.usd * s.money.brlPerUsd : after.usd
-        if (shown >= s.budget) {
+        if (after.usd >= s.budget) {
           await update($, live, x => ({ ...x, budgetWarned: true }))
-          $.ui.toast(`Mission Control: mission budget passed, this session is at ${money(after.usd, s.money)}`)
+          $.ui.toast(`Mission Control: mission budget passed, this session is at ${money(after.usd)}`)
         }
       }
       const top = movesOf(after, now, s)[0]
-      if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Mission Control: ${top.title.toLowerCase()} · ${tipOf(top, s.money)}`)
+      if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Mission Control: ${top.title.toLowerCase()} · ${tipOf(top)}`)
     } catch {
       // No reading this turn: the strip keeps the last one.
     }
@@ -421,7 +415,6 @@ export const register: Register = (on, options) => {
       live: l,
       week: await read($, week),
       move: movesOf(l, now, s)[0],
-      money: s.money,
       now,
       columns: Math.max(20, e.props.bodyColumns),
       desktop: e.surface === 'desktop',
@@ -443,7 +436,6 @@ export const register: Register = (on, options) => {
       categories: await read($, categories),
       week: await read($, week),
       weekBusy: await read($, weekBusy),
-      money: s.money,
       columns: e.props.bodyColumns,
       now,
       desktop: e.surface === 'desktop',
@@ -465,7 +457,7 @@ export const register: Register = (on, options) => {
     if (!w || !below) return below
     const { Box, Text } = $.ui.resolve(e)
     const text = w.isAgent
-      ? `◆ Probe (subagent) · ${tok(w.tokens)} tokens${w.ms ? ' · ' + seconds(w.ms) : ''}${w.usd ? ' · ≈ ' + money(w.usd, s.money) : ''}${w.model ? ' · ' + w.model.replace(/^claude-/, '') : ''}`
+      ? `◆ Probe (subagent) · ${tok(w.tokens)} tokens${w.ms ? ' · ' + seconds(w.ms) : ''}${w.usd ? ' · ≈ ' + money(w.usd) : ''}${w.model ? ' · ' + w.model.replace(/^claude-/, '') : ''}`
       : `◆ Heavy cargo · ${tok(w.tokens)} now on board: every later request re-reads it`
     return Box({ flexDirection: 'column', children: [below, Text({ key: 'w', color: w.isAgent ? '#b866e6' : '#e0a030', children: text })] })
   })
@@ -474,7 +466,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.props.isDraft || e.props.isWorking) return next(e)
     const l = await read($, live)
-    const tip = tipOf(movesOf(l, await $.clock.now(), s)[0], s.money)
+    const tip = tipOf(movesOf(l, await $.clock.now(), s)[0])
     return tip ? next({ ...e, props: { ...e.props, hint: tip } }) : next(e)
   })
 }

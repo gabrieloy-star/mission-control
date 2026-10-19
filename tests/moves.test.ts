@@ -8,8 +8,7 @@ import { drawPane } from '../hooks/pane'
 import { summarize } from '../hooks/week'
 
 const NOW = Date.parse('2026-10-18T15:00:00Z')
-const USD = { currency: 'USD' as const, brlPerUsd: 5.4 }
-const SETTINGS = { minTokens: 40_000, money: USD, budget: 100 }
+const SETTINGS = { minTokens: 40_000, budget: 100 }
 
 function live(over: Partial<Live> = {}): Live {
   return {
@@ -37,7 +36,7 @@ test('a short fuse offers to compact, with the saving', () => {
   expect(moves[0]!.id).toBe('break')
   expect(moves[0]!.key).toBe('c')
   expect(moves[0]!.usd).toBeGreaterThan(0.8)
-  expect(tipOf(moves[0], USD)).toContain('press c')
+  expect(tipOf(moves[0])).toContain('press c')
 })
 
 test('a cold, huge context suggests a fresh thread, not a resend', () => {
@@ -83,7 +82,7 @@ function refusedBoxProps(node: any, found: string[] = []): string[] {
 
 function partsAt(columns: number, desktop: boolean) {
   const l = live({ limits: [{ kind: 'five_hour', percentUsed: 61 }, { kind: 'seven_day', percentUsed: 41 }], cacheAt: NOW - 52 * MINUTE })
-  const tree: any = drawStrip(el, { live: l, week: null, move: movesOf(l, NOW, SETTINGS)[0], money: USD, now: NOW, columns, desktop, onMove() {}, onOpen() {} })
+  const tree: any = drawStrip(el, { live: l, week: null, move: movesOf(l, NOW, SETTINGS)[0], now: NOW, columns, desktop, onMove() {}, onOpen() {} })
   return (tree.children as any[]).map(c => c.key as string)
 }
 
@@ -97,7 +96,7 @@ test('the ⋯ card shows both fuel windows with refuel times and the week of Fab
     { kind: 'five_hour', percentUsed: 61, resetsAt: new Date(NOW + 2 * HOUR).toISOString() },
     { kind: 'seven_day', percentUsed: 41, resetsAt: new Date(NOW + 50 * HOUR).toISOString() },
   ] })
-  const card = statusCard({ live: l, week, move: undefined, money: USD, now: NOW, columns: 160, desktop: true, onMove() {}, onOpen() {} })
+  const card = statusCard({ live: l, week, move: undefined, now: NOW, columns: 160, desktop: true, onMove() {}, onOpen() {} })
   const text = card.rows.map(r => `${r.label} ${r.value ?? ''}`).join('\n')
   expect(text).toContain('Fuel · 5 hours 39% left · refuels in 2h00')
   expect(text).toContain('Fuel · 7 days 59% left · refuels in 2d2h')
@@ -123,7 +122,7 @@ test('the week folds into money and lessons', () => {
     at: NOW, since: '7d', sessions: 10, requests: 100,
     main: { 'claude-opus-5-5': t(300_000_000) }, sub: { 'claude-opus-5-5': t(900_000_000) },
     agentTypes: { 'general-purpose': { runs: 30, tokens: 900_000_000 } }, cold: { count: 12, byModel: { 'claude-opus-5-5': 2_400_000 } }, projects: [],
-  }, USD)
+  })
   expect(s.lessons[0]).toContain('Probes (subagents) spent')
   expect(s.lessons.some(l => l.includes('12 times'))).toBe(true)
 })
@@ -141,7 +140,7 @@ test('every pane tab draws on both surfaces without throwing', () => {
   for (const desktop of [false, true]) {
     for (const tab of ['moves', 'tank', 'session', 'week'] as const) {
       const tree: any = drawPane(el, { tab, live: l, moves: movesOf(l, NOW, SETTINGS), categories: [{ name: 'Messages', tokens: 140_000 }, { name: 'System prompt', tokens: 12_000 }],
-        week: wk, weekBusy: false, money: USD, columns: 56, now: NOW, desktop }, { setTab() {}, compact() {}, readWeek() {} })
+        week: wk, weekBusy: false, columns: 56, now: NOW, desktop }, { setTab() {}, compact() {}, readWeek() {} })
       expect(tree.type).toBe('Box')
       expect(JSON.stringify(tree)).not.toContain('"plain":false')
       expect(refusedBoxProps(tree)).toEqual([])

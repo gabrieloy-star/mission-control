@@ -5,7 +5,7 @@
 
 import type { Category, Live, Tab, Week } from '../types'
 import { fuseLeft, money, seconds, span, tok } from './moves'
-import type { Money, Move } from './moves'
+import type { Move } from './moves'
 import { INK, raceOf } from './strip'
 import { readUsd } from './prices'
 import { summarize } from './week'
@@ -17,7 +17,6 @@ export type PaneInput = {
   categories: Category[]
   week: Week | null
   weekBusy: boolean
-  money: Money
   columns: number
   now: number
   desktop: boolean
@@ -145,7 +144,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
       Text({ key: 's', bold: true, color: status.color, children: '● ' + status.word }),
       Text({ key: 'm', dimColor: true, children: [elapsed, model].filter(Boolean).join(' · ') }),
     ] }),
-    Text({ key: 'c', bold: true, children: live.usd === null ? '–' : money(live.usd, p.money) }),
+    Text({ key: 'c', bold: true, children: live.usd === null ? '–' : money(live.usd) }),
   ] })
 
   const tabs = Box({ key: 'tabs', flexDirection: 'row', columnGap: 1, flexWrap: 'wrap', children: TABS.map(t =>
@@ -170,7 +169,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
       body = [
         tiles('k', [
           { label: 'Maneuvers', value: String(p.moves.length), color: TONE[p.moves[0]!.tone] },
-          { label: 'Save now', value: now > 0.01 ? '≈ ' + money(now, p.money) : '–', color: now > 0.01 ? INK.mint : undefined },
+          { label: 'Save now', value: now > 0.01 ? '≈ ' + money(now) : '–', color: now > 0.01 ? INK.mint : undefined },
           { label: 'Payload', value: live.tokens === null ? '–' : tok(live.tokens) },
         ]),
         ...p.moves.map((m, i) => Box({
@@ -179,7 +178,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
             Box({ key: 'h', flexDirection: 'row', justifyContent: 'space-between', columnGap: 2, children: [
               Box({ key: 't', flexShrink: 1, children: [Text({ key: 't', bold: true, color: TONE[m.tone], children: m.title })] }),
               ...(m.usd > 0.01 ? [Box({ key: 's', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, children: [
-                Text({ key: 'v', bold: true, children: '≈ ' + money(m.usd, p.money) }),
+                Text({ key: 'v', bold: true, children: '≈ ' + money(m.usd) }),
                 Text({ key: 'u', dimColor: true, children: m.unit === 'now' ? 'saved now' : 'saved ' + m.unit }),
               ] })] : []),
             ] }),
@@ -200,7 +199,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
     body = [tiles('k', [
       { label: 'On board', value: `${tok(onBoard)} · ${pct}%`, color: pct >= 85 ? INK.coral : pct >= 60 ? INK.amber : undefined },
       { label: 'Window', value: tok(window) },
-      { label: 'Per request', value: live.fixed === null ? '–' : money(readUsd(onBoard, live.model), p.money) },
+      { label: 'Per request', value: live.fixed === null ? '–' : money(readUsd(onBoard, live.model)) },
     ])]
     body.push(caption('ch', 'What every request carries', '85% red line'))
     if (desktop) {
@@ -243,7 +242,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
     const total = p.live.usd ?? turns.reduce((n, t) => n + t.usd, 0)
     body = [tiles('k', [
       { label: 'Messages', value: String(turns.length) },
-      { label: 'Mission cost', value: money(total, p.money) },
+      { label: 'Mission cost', value: money(total) },
       { label: 'Subagents', value: probes.length ? `${Math.round((probeUsd / Math.max(0.0001, total)) * 100)}%` : '–', color: probes.length ? INK.orchid : undefined },
     ])]
     body.push(caption('ch', 'Cost per message', recent.length ? `last ${recent.length}` : undefined))
@@ -260,7 +259,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
         const h = Math.max(2, (t.usd / top) * (base - 12))
         bars += `<rect x="${(i * bw + 1.5).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${Math.max(1.5, bw - 3).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colorOf(t)}" opacity="${t.isCold || t.agentShare >= 0.5 ? 1 : 0.75}"/>`
       })
-      bars += `<text x="${W}" y="9" font-size="10" fill="${FAINT}" text-anchor="end">${money(top, p.money)}</text>`
+      bars += `<text x="${W}" y="9" font-size="10" fill="${FAINT}" text-anchor="end">${money(top)}</text>`
       bars += `<text x="0" y="${H - 2}" font-size="10" fill="${FAINT}">first</text><text x="${Math.min(W, recent.length * bw)}" y="${H - 2}" font-size="10" fill="${FAINT}" text-anchor="end">latest</text>`
       body.push(Svg({ key: 'chart', alt: 'Cost of each message this session', width: W, height: H, source: svg(W, H, bars) }))
     } else {
@@ -271,13 +270,13 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
       Text({ key: 'b', color: INK.orchid, children: '● mostly subagents' }),
       Text({ key: 'c', color: INK.coral, children: '● cold cache' }),
     ] }))
-    if (cold.length) body.push(row('cold', `Cold orbit returns · ${cold.length}`, money(cold.reduce((n, t) => n + t.usd, 0), p.money), INK.coral))
+    if (cold.length) body.push(row('cold', `Cold orbit returns · ${cold.length}`, money(cold.reduce((n, t) => n + t.usd, 0)), INK.coral))
     if (probes.length) {
       body.push(caption('ph', 'Probes launched', 'subagents'))
       const maxP = Math.max(1, ...probes.map(w => w.tokens))
       for (const w of probes.slice(-5).reverse()) {
         body.push(barRow('p-' + w.id, `${w.agentType ?? 'probe'} · ${w.label}`, w.tokens / maxP, tok(w.tokens), INK.orchid))
-        body.push(Text({ key: 'pd-' + w.id, dimColor: true, children: `   ${[w.ms ? seconds(w.ms) : '', w.usd ? '≈ ' + money(w.usd, p.money) : '', w.model ? w.model.replace(/^claude-/, '') : ''].filter(Boolean).join(' · ')}` }))
+        body.push(Text({ key: 'pd-' + w.id, dimColor: true, children: `   ${[w.ms ? seconds(w.ms) : '', w.usd ? '≈ ' + money(w.usd) : '', w.model ? w.model.replace(/^claude-/, '') : ''].filter(Boolean).join(' · ')}` }))
       }
     }
     const cargo = p.live.weights.filter(w => !w.isAgent).sort((a, b) => b.tokens - a.tokens).slice(0, 3)
@@ -298,12 +297,12 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
         Box({ key: 'b', marginTop: 1, children: [Button({ key: 'read', label: 'Load history', variant: 'primary', hotkey: 'r', onPress: act.readWeek })] })]
     } else {
       const w = p.week
-      const s = summarize(w, p.money)
+      const s = summarize(w)
       const share = s.tokens ? s.subTokens / s.tokens : 0
       const sp = Math.round(share * 100)
       body = [tiles('k', [
         { label: 'Tokens · 7 days', value: tok(s.tokens) },
-        { label: 'Equivalent cost', value: '≈ ' + money(s.usd, p.money) },
+        { label: 'Equivalent cost', value: '≈ ' + money(s.usd) },
         { label: 'From cache', value: `${Math.round(s.readShare * 100)}%`, color: s.readShare >= 0.9 ? INK.mint : INK.amber },
       ])]
       body.push(caption('wh', 'Who spent it', `${w.sessions} flights`))
@@ -323,7 +322,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
           Box({ key: 'b', flexGrow: 1, width: '50%', children: [legend('b', INK.cobalt, `Crew · ${100 - sp}%`, 'Your own conversations with Claude')] }),
         ] }),
         caption('ch', 'Cold orbit returns', 'contexts over 100k'),
-        row('cold', `${w.cold.count} times the cache went cold and was rewritten`, '≈ ' + money(s.coldUsd, p.money), w.cold.count ? INK.coral : undefined),
+        row('cold', `${w.cold.count} times the cache went cold and was rewritten`, '≈ ' + money(s.coldUsd), w.cold.count ? INK.coral : undefined),
         caption('dh', 'Destinations', 'by tokens'),
       )
       const topProject = Math.max(1, ...w.projects.map(x => x.tokens))
