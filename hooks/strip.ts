@@ -172,7 +172,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
             live.fixed !== null ? `Grey: ${tok(live.fixed)} of instructions, tools and memory` : '',
             'Blue: your conversation · bright: what the last message added · red line: 85%',
           ],
-          todo: tone === 'hot' ? 'compact (press c), or start a new session for the next task'
+          todo: tone === 'hot' ? 'compact (click compact), or start a new session for the next task'
             : tone === 'warn' ? 'type /clear before an unrelated task'
             : 'nothing',
         })
@@ -213,8 +213,8 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
           ? [`A ${ttl >= HOUR ? '1-hour' : '5-minute'} cache: while it lasts, each message reads the context at a fraction of the price`, 'After it expires, the next message pays full price to send it all again',
             s.idleAt && s.idleAt > now ? `If you send nothing, Usage Coach compacts at ${clockOf(s.idleAt)} (the blue tick)` : 'Idle compact: off for this session (small conversation or short cache)']
           : ['The next message pays full price to send the whole context again'],
-        todo: state === 'hot' ? 'compact before your next message (press c), or start a new session'
-          : state === 'warn' ? `send your next message before ${clockOf(cacheEnd(live)!)}, or compact (press c) before a break`
+        todo: state === 'hot' ? 'compact before your next message (click compact), or start a new session'
+          : state === 'warn' ? `send your next message before ${clockOf(cacheEnd(live)!)}, or compact (click compact) before a break`
           : 'nothing',
       }),
       draw: () => {
@@ -293,11 +293,11 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
   const suggestion = s.suggestion
   const long = suggestion ? `${suggestion.short}${suggestion.usd > 0.01 ? ' · saves ' + money(suggestion.usd) + (suggestion.unit === 'now' ? '' : ' ' + suggestion.unit) : ''}` : 'all good'
   const short = suggestion ? `${suggestion.short}${suggestion.usd > 0.01 && suggestion.unit === 'now' ? ' ' + money(suggestion.usd) : ''}` : 'all good'
-  const suggestionCells = (label: string) => label.length + (suggestion?.key ? 7 : 2)
+  const suggestionCells = (label: string) => label.length + (suggestion?.key ? 4 : 2)
   const drawSuggestion = (label: string) => () => {
     if (!suggestion) return [Text({ key: 'm', color: INK.mint, children: MARK.calm + ' ' + label })]
     if (suggestion.key && s.isQueued) return [Text({ key: 'm', color: INK.amber, children: MARK.warn + ' compaction queued' })]
-    if (suggestion.key) return [Button({ key: 'suggestion', label, hotkey: suggestion.key, variant: 'primary', onPress: s.onSuggestion })]
+    if (suggestion.key) return [Button({ key: 'suggestion', label, variant: 'primary', onPress: s.onSuggestion })]
     return [Text({ key: 'm', color: TONE[suggestion.tone], children: MARK[suggestion.tone] + ' ' + label })]
   }
   const suggestionTip = suggestion
@@ -310,15 +310,15 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
   parts.push({ key: 'suggestion', rank: 2, cells: suggestionCells(long), draw: drawSuggestion(long), tip: suggestionTip })
   const insightLabel = s.insights ? `insights ${s.insights}` : 'insights'
   parts.push({
-    key: 'insights', rank: 2.5, cells: insightLabel.length + 7,
-    draw: () => [Button({ key: 'insights', label: insightLabel, hotkey: 'i', plain: true, onPress: s.onInsights })],
+    key: 'insights', rank: 2.5, cells: insightLabel.length + 4,
+    draw: () => [Button({ key: 'insights', label: insightLabel, plain: true, onPress: s.onInsights })],
     tip: tipText({
       name: 'Insights', now: s.insights ? `${s.insights} for this session` : 'none open', tone: 'calm',
       what: ['Your usage limits, whether the model fits the work, and habits that keep sessions cheap'],
-      todo: 'click or press i to read them',
+      todo: 'click insights to read them',
     }),
   })
-  parts.push({ key: 'open', rank: 1.5, cells: 11, draw: () => [Button({ key: 'open', label: 'details', hotkey: 'o', onPress: s.onOpen })], card: statusCard(s) })
+  parts.push({ key: 'open', rank: 1.5, cells: 11, draw: () => [Button({ key: 'open', label: 'details', onPress: s.onOpen })], card: statusCard(s) })
 
   // Fit: keep parts by rank while they fit; a long suggestion label gives way to the short one first.
   const fit = (list: Part[]) => {
@@ -361,9 +361,9 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
       Text({ key: 'a', bold: true, children: 'Usage Coach: this line shows your context, prompt cache, usage limits and session cost. It costs no tokens.' }),
       Text({ key: 'b', dimColor: true, children: desktop
         ? 'Hover any part to see what it means and what to do. The right end shows the change that saves the most.'
-        : 'The right end shows the change that saves the most. Press i for insights.' }),
+        : 'The right end shows the change that saves the most. Click insights for more.' }),
       Box({ key: 'c', flexDirection: 'row', columnGap: 2, alignItems: 'center', children: [
-        Text({ key: 't', dimColor: true, children: 'Click details or press O for the full panel.' }),
+        Text({ key: 't', dimColor: true, children: 'Click details for the full panel.' }),
         Button({ key: 'ok', label: 'got it', variant: 'primary', onPress: s.onWelcomeDone ?? (() => {}) }),
       ] }),
     ],
@@ -408,7 +408,7 @@ export function statusCard(s: StripInput): Card {
   } else {
     rows.push({ label: 'Fable · 7 days: reading the week…' })
   }
-  rows.push({ label: 'Click details (or press O) to open the Usage Coach panel' })
+  rows.push({ label: 'Click details to open the Usage Coach panel' })
   return { title: 'Session status', rows, isRight: true }
 }
 

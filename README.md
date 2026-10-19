@@ -27,12 +27,12 @@ One line that fits the width of the prompt. When space runs short, the least imp
 | **Usage limits · 5 hours / 7 days** | How much of each limit is left, against the time left in the window. At the current pace it also says when the limit runs out, and warns once when that comes before it resets. |
 | **Session cost** | What this session has cost so far at API list prices, and what the last message added. |
 | **Suggestion** | The single change that saves the most right now, such as compacting before the cache expires. A button runs it. Only savings of $1 or more over an hour of work are suggested; otherwise it says "✓ all good". When Claude fails the same step three times in a row, that comes first, with what it cost since the first failure. |
-| **insights** | Opens the Insights tab. The number is how many insights this session has. Press **i**. |
-| **details** | Hover for a status card: session time, model and cost, both usage limits with their reset times, and your Fable use over 7 days. Click (or press **O**) to open the side pane. |
+| **insights** | Opens the Insights tab. The number is how many insights this session has. |
+| **details** | Hover for a status card: session time, model and cost, both usage limits with their reset times, and your Fable use over 7 days. Click it to open the side pane. |
 
 ## The side pane
 
-Open it with `/usage-coach`, the **details** button or **O**. Every tab opens on three numbers: today's cost across sessions, the 5-hour limit (with when it runs out at this pace), and what Usage Coach's compactions saved over 7 days. It has five tabs.
+Open it with `/usage-coach` or the **details** button. Every tab opens on three numbers: today's cost across sessions, the 5-hour limit (with when it runs out at this pace), and what Usage Coach's compactions saved over 7 days. It has five tabs.
 
 - **Suggestions.** Every change worth making now, ranked by how much it saves, each with a one-line reason:
   - compact, or start a new session once the cache has expired on a large context;

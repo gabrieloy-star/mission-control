@@ -155,7 +155,7 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
         id: 'cold-compact', tone: 'hot', unit: 'now', usd, score: usd, key: 'c',
         title: 'Compact before your next message',
         short: 'compact first',
-        how: `The cache expired, so your next message sends all ${tok(tokens)} tokens again at full price. Compacting first sends a ${tok(SUMMARY_TOKENS)} summary instead. Press c, or type /compact.`,
+        how: `The cache expired, so your next message sends all ${tok(tokens)} tokens again at full price. Compacting first sends a ${tok(SUMMARY_TOKENS)} summary instead. Click compact, or type /compact.`,
       })
     }
   }
@@ -167,7 +167,7 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
       id: 'break', tone: 'warn', unit: 'now', usd, score: usd, key: 'c',
       title: 'Compact before the cache expires',
       short: 'compact now',
-      how: `The cache expires at ${clockOf(end)}. A message after that pays ${money(rewriteUsd(tokens, model))} to send all ${tok(tokens)} tokens again. Press c, or type /compact. If you step away, Usage Coach compacts a few minutes before it expires.`,
+      how: `The cache expires at ${clockOf(end)}. A message after that pays ${money(rewriteUsd(tokens, model))} to send all ${tok(tokens)} tokens again. Click compact, or type /compact. If you step away, Usage Coach compacts a few minutes before it expires.`,
     })
   }
 
@@ -178,7 +178,7 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
       id: 'heavy', tone: 'warn', unit: 'per message', usd, score: usd * CALLS_PER_HOUR, key: 'c',
       title: 'Compact to make each message cheaper',
       short: 'compact',
-      how: `Every message sends ${tok(tokens)} tokens of context. After compacting it sends about ${tok((live.fixed ?? 0) + SUMMARY_TOKENS)}: ${money(usd)} less per message. Best between tasks. Press c, or type /compact.`,
+      how: `Every message sends ${tok(tokens)} tokens of context. After compacting it sends about ${tok((live.fixed ?? 0) + SUMMARY_TOKENS)}: ${money(usd)} less per message. Best between tasks. Click compact, or type /compact.`,
     })
   }
 
@@ -241,7 +241,7 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
 /** The suggestion in one line, for the empty prompt and the toast. */
 export function tipOf(suggestion: Suggestion | undefined): string | null {
   if (!suggestion) return null
-  return `${suggestion.title}${savingOf(suggestion)}${suggestion.key ? ` · press ${suggestion.key}` : ''}`
+  return `${suggestion.title}${savingOf(suggestion)}${suggestion.key ? ' · click compact' : ''}`
 }
 
 /** " · saves about $1.20 per message", or nothing when it saves nothing measurable. */

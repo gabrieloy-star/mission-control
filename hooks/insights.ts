@@ -157,7 +157,7 @@ export function insightsOf(live: Live, week: Week | null, now: number): Insight[
     if (expired.length >= 2) out.push({
       id: 'habit-expired', kind: 'habit', tone: 'warn',
       title: `${expired.length} times the cache had expired when you came back`,
-      how: `Those messages cost ${money(expired.reduce((n, t) => n + t.usd, 0))}. Before a long break, compact (press c) or leave idle compact on in the settings.`,
+      how: `Those messages cost ${money(expired.reduce((n, t) => n + t.usd, 0))}. Before a long break, compact (click compact) or leave idle compact on in the settings.`,
     })
     const agents = turns.reduce((n, t) => n + t.agentShare, 0) / turns.length
     if (agents >= 0.5) out.push({

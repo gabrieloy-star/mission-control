@@ -53,7 +53,7 @@ test('a cache about to expire offers to compact, with the saving', () => {
   expect(brk.usd).toBeGreaterThan(1.5)
   // 140k of conversation saves under $1 on Opus 5.5: not worth a suggestion.
   expect(suggestionsOf(live({ cacheAt: NOW - 50 * MINUTE }), NOW, SETTINGS)).toEqual([])
-  expect(tipOf(brk)).toContain('press c')
+  expect(tipOf(brk)).toContain('click compact')
 })
 
 test('a cold, huge context suggests a fresh thread, not a resend', () => {

@@ -491,7 +491,7 @@ export const register: Register = (on, options) => {
       const fit = insightsOf(after, await read($, week), now).find(i => i.kind === 'model' && i.tone !== 'calm' && !toldInsights.has(i.id))
       if (fit) {
         toldInsights.add(fit.id)
-        await toastOnce($, `Usage Coach insight: ${fit.title} · press i`)
+        await toastOnce($, `Usage Coach insight: ${fit.title} · click insights`)
       }
     } catch {
       // No reading this turn: the strip keeps the last one.
