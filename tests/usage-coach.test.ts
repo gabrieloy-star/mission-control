@@ -322,3 +322,13 @@ test('the pane draws Today, tasks and the weekly change on both surfaces', () =>
     }
   }
 })
+
+test('a chart whose top message costs under a cent still draws', () => {
+  const l = live({ turns: [{ at: NOW, ms: 1000, added: 0, usd: 0.002, cached: 1, agentShare: 0, isCold: false }] })
+  const tree: any = drawPane(el, { tab: 'session', live: l, suggestions: [], insights: [], categories: [], week: null, weekBusy: false, columns: 56, now: NOW, desktop: true },
+    { setTab() {}, compact() {}, readWeek() {} })
+  const text = JSON.stringify(tree)
+  expect(text).toContain('&lt; $0.01')
+  expect(text).not.toContain('>< $0.01<')
+  expect(text).toContain('earlier request')
+})

@@ -64,6 +64,11 @@ const SHADES: Record<string, string> = {
 
 type Tile = { label: string; value: string; color?: string }
 
+/** Text inside an SVG: "<" and "&" would break the whole picture (as in "< $0.01"). */
+function esc(text: string) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function svg(w: number, h: number, body: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" font-family="${SANS}">${body}</svg>`
 }
@@ -277,8 +282,8 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
         const h = Math.max(2, (t.usd / top) * (base - 12))
         bars += `<rect x="${(i * bw + 1.5).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${Math.max(1.5, bw - 3).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colorOf(t)}" opacity="${t.isCold || t.agentShare >= 0.5 ? 1 : 0.75}"/>`
       })
-      bars += `<text x="${W}" y="9" font-size="10" fill="${FAINT}" text-anchor="end">${money(top)}</text>`
-      bars += `<text x="0" y="${H - 2}" font-size="10" fill="${FAINT}">first</text><text x="${Math.min(W, recent.length * bw)}" y="${H - 2}" font-size="10" fill="${FAINT}" text-anchor="end">latest</text>`
+      bars += `<text x="${W}" y="9" font-size="10" fill="${FAINT}" text-anchor="end">${esc(money(top))}</text>`
+      if (recent.length > 1) bars += `<text x="0" y="${H - 2}" font-size="10" fill="${FAINT}">first</text><text x="${Math.min(W, recent.length * bw)}" y="${H - 2}" font-size="10" fill="${FAINT}" text-anchor="end">latest</text>`
       body.push(Svg({ key: 'chart', alt: 'Cost of each message this session', width: W, height: H, source: svg(W, H, bars) }))
     } else {
       body.push(Box({ key: 'spark', flexDirection: 'row', children: recent.map((t, i) => Text({ key: 's' + i, color: colorOf(t), children: SPARK[Math.min(7, Math.floor((t.usd / top) * 7.999))]! })) }))
@@ -296,7 +301,8 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
       const maxT = Math.max(0.0001, ...shown.map(t => t.usd))
       body.push(caption('th', 'Cost per task', `latest ${shown.length} of ${tasks.length}`))
       shown.forEach((t, i) => {
-        const what = t.prompt ? `“${t.prompt}”` : 'session start'
+        // No words: the request began before Usage Coach was loaded, or the session started without one.
+        const what = t.prompt ? `“${t.prompt}”` : 'earlier request'
         body.push(barRow('t' + i, `${clockOf(t.at)} · ${what}`, t.usd / maxT, money(t.usd), colorOf(t)))
         const bits = [t.messages > 1 ? `${t.messages} messages` : '', t.tools ? `${t.tools} tool call${t.tools === 1 ? '' : 's'}` : '', t.isCold ? 'cache had expired' : '', t.usd === dear && tasks.length > 1 ? '▲ most expensive' : '']
         const line = bits.filter(Boolean).join(' · ')
