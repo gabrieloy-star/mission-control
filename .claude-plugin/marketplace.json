@@ -1,0 +1,6 @@
+{
+  "name": "gabriel-mods",
+  "description": "Gabriel's own Claude Code mods",
+  "owner": { "name": "Gabriel" },
+  "plugins": [{ "name": "mission-control", "source": "./" }]
+}
