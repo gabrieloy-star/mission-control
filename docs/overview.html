@@ -91,7 +91,7 @@ pre { margin: 0; background: var(--bg-2); border: 1px solid var(--line); border-
     <p class="lede">See where your tokens go, and the one change that saves the most right now. One strip above the prompt, one side pane, and an automatic compact before the prompt cache expires.</p>
     <div class="hero-strip">
       <img class="shot" src="img/strip.png" alt="The Usage Coach strip above the Claude Code prompt">
-      <span class="caption">The strip, as it shows in Claude: context · prompt cache · usage limits for 5 hours and 7 days · session cost · suggestion · insights · details</span>
+      <span class="caption">The strip above the prompt (demo data): context · prompt cache · usage limits for 5 hours and 7 days · session cost · suggestion · insights · details</span>
     </div>
   </header>
 
@@ -116,9 +116,9 @@ pre { margin: 0; background: var(--bg-2); border: 1px solid var(--line); border-
       <h2>Every number explains itself</h2>
     </div>
     <div class="tips">
-      <div class="tip"><img class="shot" src="img/tip-payload.png" alt="Context tooltip"><p><b>Context.</b> How much every message sends, and what it is made of.</p></div>
-      <div class="tip"><img class="shot" src="img/tip-orbit.png" alt="Prompt cache tooltip"><p><b>Prompt cache.</b> The exact time the cache is valid until.</p></div>
-      <div class="tip"><img class="shot" src="img/tip-fuel.png" alt="Usage limit tooltip"><p><b>Usage limits.</b> Usage left, time left in the window, when it resets, and when it runs out at this pace.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-context.png" alt="Context tooltip"><p><b>Context.</b> How much every message sends, and what it is made of.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-cache.png" alt="Prompt cache tooltip"><p><b>Prompt cache.</b> The exact time the cache is valid until.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-limit.png" alt="Usage limit tooltip"><p><b>Usage limits.</b> Usage left, time left in the window, when it resets, and when it runs out at this pace.</p></div>
       <div class="tip"><img class="shot" src="img/tip-status.png" alt="Session status card"><p><b>Session status.</b> The whole picture in one card, Fable included.</p></div>
     </div>
   </section>
@@ -129,10 +129,12 @@ pre { margin: 0; background: var(--bg-2); border: 1px solid var(--line); border-
       <h2>Five tabs, one question: where did it go?</h2>
     </div>
     <div class="tabs">
-      <div class="tab"><div class="t"><span class="n">1</span><h3>Suggestions</h3></div><p>Every change worth making now, ranked by money saved. Compact now works even mid-answer: it is queued and runs when Claude finishes.</p><img class="shot" src="img/maneuvers.png" alt="Suggestions tab"></div>
-      <div class="tab"><div class="t"><span class="n">2</span><h3>Context</h3></div><p>What every message sends, by Claude's own categories, and which MCP servers go unused but are still sent with every message.</p><img class="shot" src="img/payload.png" alt="Context tab"></div>
-      <div class="tab"><div class="t"><span class="n">3</span><h3>Session</h3></div><p>The cost of each message and of each task in this session, which were mostly subagents, and which came after the cache expired.</p><img class="shot" src="img/flight-log.png" alt="Session tab"></div>
-      <div class="tab"><div class="t"><span class="n">4</span><h3>History</h3></div><p>The last 7 days across your projects: tokens, cost at list prices, cache share, who spent it, the change against the week before, and lessons to apply.</p><img class="shot" src="img/history.png" alt="History tab"></div>
+      <div class="tab"><div class="t"><span class="n">1</span><h3>Suggestions</h3></div><p>Every change worth making now, ranked by money saved. Compact now works even mid-answer: it is queued and runs when Claude finishes.</p><img class="shot" src="img/pane-suggestions.png" alt="Suggestions tab"></div>
+      <div class="tab"><div class="t"><span class="n">2</span><h3>Context</h3></div><p>What every message sends, by Claude's own categories, and which MCP servers go unused but are still sent with every message.</p><img class="shot" src="img/pane-context.png" alt="Context tab"></div>
+      <div class="tab"><div class="t"><span class="n">3</span><h3>Session</h3></div><p>The cost of each message and of each task in this session, which were mostly subagents, and which came after the cache expired.</p><img class="shot" src="img/pane-session.png" alt="Session tab"></div>
+      <div class="tab"><div class="t"><span class="n">4</span><h3>History</h3></div><p>The last 7 days across your projects: tokens, cost at list prices, cache share, who spent it, the change against the week before, and lessons to apply.</p><img class="shot" src="img/pane-history.png" alt="History tab"></div>
+      <div class="tab"><div class="t"><span class="n">5</span><h3>Insights</h3></div><p>What needs you right now: a usage limit that runs out before it resets, or a step Claude keeps failing. Then whether the model fits the work, your week against the one before, and habits that keep sessions cheap.</p><img class="shot" src="img/pane-insights.png" alt="Insights tab"></div>
+      <div class="tab"><div class="t"><span class="n">↑</span><h3>Today, on every tab</h3></div><p>Three numbers above the tabs: today's cost across sessions, the 5-hour limit with when it runs out at this pace, and what Usage Coach's compactions saved over 7 days. The welcome card explains the strip the first time.</p></div>
     </div>
   </section>
 
