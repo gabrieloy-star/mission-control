@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mission Control</title>
+<title>Usage Coach</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Figtree:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -84,81 +84,81 @@ pre { margin: 0; background: var(--bg-2); border: 1px solid var(--line); border-
     <div class="hero-top">
       <div class="head">
         <span class="tag">A Claude Code mod</span>
-        <h1>Mission<br>Control</h1>
+        <h1>Usage<br>Coach</h1>
       </div>
       <div class="zero"><b>0 tokens</b>to watch: it reads only what Claude already reports</div>
     </div>
-    <p class="lede">See where your tokens go, and the one move that saves the most right now. One strip above the prompt, one side pane, and an automatic compact before the cache goes cold.</p>
+    <p class="lede">See where your tokens go, and the one change that saves the most right now. One strip above the prompt, one side pane, and an automatic compact before the prompt cache expires.</p>
     <div class="hero-strip">
-      <img class="shot" src="img/strip.png" alt="The Mission Control strip above the Claude Code prompt">
-      <span class="caption">The strip, as it shows in Claude: payload · cache orbit · fuel for 5 hours and 7 days · spend · next move · ⋯</span>
+      <img class="shot" src="img/strip.png" alt="The Usage Coach strip above the Claude Code prompt">
+      <span class="caption">The strip, as it shows in Claude: context · prompt cache · usage limits for 5 hours and 7 days · session cost · suggestion · insights · details</span>
     </div>
   </header>
 
   <section>
     <div class="head">
       <span class="tag">The strip</span>
-      <h2>Five instruments and a move</h2>
+      <h2>Five readings and a suggestion</h2>
     </div>
     <div class="anatomy">
-      <div class="part"><span class="nm cobalt">Payload</span><p>What rides on every request against the model's window. Grey is fixed weight, blue your conversation, a red line at 85% marks where compacting pays off.</p></div>
-      <div class="part"><span class="nm mint">Orbit</span><p>Minutes left before the prompt cache cools. Warm, each message re-reads the payload at a fraction of the price. Cold, it pays to write it all again.</p></div>
-      <div class="part"><span class="nm amber">Fuel</span><p>Usage left in the 5-hour and 7-day limits, raced against the clock. Fuel below the ring means you burn faster than time passes.</p></div>
-      <div class="part"><span class="nm">Spend</span><p>What the session has cost so far, and what the last message added, in US dollars.</p></div>
-      <div class="part"><span class="nm mint">Next move</span><p>The single action that saves the most right now, with a button to run it. <span class="mint">✓ nominal</span> means nothing needs doing.</p></div>
-      <div class="part"><span class="nm">⋯ Status</span><p>Hover for session time, both fuel windows with their refuel times, and your Fable use this week. Click or press <b>O</b> for the pane.</p></div>
+      <div class="part"><span class="nm cobalt">Context</span><p>What every message sends, against the model's context window. Grey is instructions, tools and memory, blue your conversation, a red line at 85% marks where compacting pays off.</p></div>
+      <div class="part"><span class="nm mint">Prompt cache</span><p>Time left before the prompt cache expires. While it lasts, each message reads the context at a fraction of the price. After it expires, the next message pays to send it all again.</p></div>
+      <div class="part"><span class="nm amber">Usage limits</span><p>Usage left in the 5-hour and weekly limits, against the time left. At the current pace it says when each one runs out, and warns when that comes before it resets.</p></div>
+      <div class="part"><span class="nm">Session cost</span><p>What the session has cost so far at list prices, what the last message added, and what the last task cost.</p></div>
+      <div class="part"><span class="nm mint">Suggestion</span><p>The single change that saves the most right now, with a button to run it. <span class="mint">✓ all good</span> means nothing needs doing. A step Claude keeps failing comes first.</p></div>
+      <div class="part"><span class="nm">Details</span><p>Hover for session time, both usage limits with their reset times, and your Fable use this week. Click or press <b>O</b> for the pane; <b>i</b> opens Insights.</p></div>
     </div>
   </section>
 
   <section>
     <div class="head">
-      <span class="tag">Hover any instrument</span>
+      <span class="tag">Hover any part</span>
       <h2>Every number explains itself</h2>
     </div>
     <div class="tips">
-      <div class="tip"><img class="shot" src="img/tip-payload.png" alt="Payload tooltip"><p><b>Payload.</b> How much is on board and what it is made of.</p></div>
-      <div class="tip"><img class="shot" src="img/tip-orbit.png" alt="Orbit tooltip"><p><b>Orbit.</b> The exact time the cache stays warm until.</p></div>
-      <div class="tip"><img class="shot" src="img/tip-fuel.png" alt="Fuel tooltip"><p><b>Fuel.</b> Usage left, time left in the window, and when it refuels.</p></div>
-      <div class="tip"><img class="shot" src="img/tip-status.png" alt="Mission status card"><p><b>Mission status.</b> The whole picture in one card, Fable included.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-payload.png" alt="Context tooltip"><p><b>Context.</b> How much every message sends, and what it is made of.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-orbit.png" alt="Prompt cache tooltip"><p><b>Prompt cache.</b> The exact time the cache is valid until.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-fuel.png" alt="Usage limit tooltip"><p><b>Usage limits.</b> Usage left, time left in the window, when it resets, and when it runs out at this pace.</p></div>
+      <div class="tip"><img class="shot" src="img/tip-status.png" alt="Session status card"><p><b>Session status.</b> The whole picture in one card, Fable included.</p></div>
     </div>
   </section>
 
   <section>
     <div class="head">
-      <span class="tag">The side pane · /mission</span>
-      <h2>Four tabs, one question: where did it go?</h2>
+      <span class="tag">The side pane · /usage-coach</span>
+      <h2>Five tabs, one question: where did it go?</h2>
     </div>
     <div class="tabs">
-      <div class="tab"><div class="t"><span class="n">1</span><h3>Maneuvers</h3></div><p>Every saving move available now, ranked by money saved. Compact now works even mid-answer: it waits in line and runs when Claude finishes.</p><img class="shot" src="img/maneuvers.png" alt="Maneuvers tab"></div>
-      <div class="tab"><div class="t"><span class="n">2</span><h3>Payload</h3></div><p>What every request carries, by category, and which MCP servers sit idle but still weigh on every message.</p><img class="shot" src="img/payload.png" alt="Payload tab"></div>
-      <div class="tab"><div class="t"><span class="n">3</span><h3>Flight log</h3></div><p>The cost of each message in this session, which ones were mostly subagents, and which hit a cold cache.</p><img class="shot" src="img/flight-log.png" alt="Flight log tab"></div>
-      <div class="tab"><div class="t"><span class="n">4</span><h3>History</h3></div><p>The last 7 days across your projects: tokens, equivalent cost, cache share, who spent it, and lessons to apply.</p><img class="shot" src="img/history.png" alt="History tab"></div>
+      <div class="tab"><div class="t"><span class="n">1</span><h3>Suggestions</h3></div><p>Every change worth making now, ranked by money saved. Compact now works even mid-answer: it is queued and runs when Claude finishes.</p><img class="shot" src="img/maneuvers.png" alt="Suggestions tab"></div>
+      <div class="tab"><div class="t"><span class="n">2</span><h3>Context</h3></div><p>What every message sends, by Claude's own categories, and which MCP servers go unused but are still sent with every message.</p><img class="shot" src="img/payload.png" alt="Context tab"></div>
+      <div class="tab"><div class="t"><span class="n">3</span><h3>Session</h3></div><p>The cost of each message and of each task in this session, which were mostly subagents, and which came after the cache expired.</p><img class="shot" src="img/flight-log.png" alt="Session tab"></div>
+      <div class="tab"><div class="t"><span class="n">4</span><h3>History</h3></div><p>The last 7 days across your projects: tokens, cost at list prices, cache share, who spent it, the change against the week before, and lessons to apply.</p><img class="shot" src="img/history.png" alt="History tab"></div>
     </div>
   </section>
 
   <section class="duo">
     <div class="card">
       <span class="tag">Idle compact</span>
-      <h2>Leave. Come back cheap.</h2>
-      <p>A large session left alone is compacted a few minutes before its 1-hour cache cools. The next message pays for a short summary instead of rewriting the whole conversation.</p>
+      <h2>Step away. Come back for less.</h2>
+      <p>A large session left alone is compacted 5 minutes before its 1-hour prompt cache expires. The next message pays for a short summary instead of sending the whole conversation again.</p>
       <div class="fuse">
-        <div><b class="mint">50 min</b><span>after the last message</span></div>
+        <div><b class="mint">55 min</b><span>after the last message</span></div>
         <div><b>40k</b><span>smallest worth compacting</span></div>
-        <div><b class="amber">1 h</b><span>before the cache cools</span></div>
+        <div><b class="amber">1 h</b><span>prompt cache lifetime</span></div>
       </div>
     </div>
     <div class="card">
       <span class="tag">Install</span>
       <h2>Two commands</h2>
       <pre><span class="dim">In Claude Code:</span>
-/plugin marketplace add gabrieloy-star/mission-control
-/plugin install mission-control@gabriel-mods</pre>
+/plugin marketplace add gabrieloy-star/usage-coach
+/plugin install usage-coach@gabriel-mods</pre>
       <p>Then open a new session. Budget and idle timing live in the plugin's settings.</p>
     </div>
   </section>
 
   <footer class="foot">
-    <span><b>Mission Control</b> · reads only what Claude Code already reports, sends nothing anywhere</span>
+    <span><b>Usage Coach</b> · reads only what Claude Code already reports, sends nothing anywhere</span>
     <span>With thanks to Chris Han, David Roberts, Eric Cologni and Anthropic</span>
   </footer>
 
