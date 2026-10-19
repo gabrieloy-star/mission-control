@@ -39,7 +39,7 @@ export function defuse($: EngineInterface, f: Fuse) {
 }
 
 function instructions(at: string, end: string) {
-  return `Mission Control compacted this idle session at ${at}, before the prompt cache expired at ${end}, so the next message does not pay to send the whole conversation again. ` +
+  return `Usage Coach compacted this idle session at ${at}, before the prompt cache expired at ${end}, so the next message does not pay to send the whole conversation again. ` +
     'Say so in one line at the top of the summary. Preserve open tasks, decisions with their reasons, pending follow-ups and their dates, files touched, and anything the user asked to keep.'
 }
 
@@ -72,7 +72,7 @@ export async function light($: EngineInterface, f: Fuse, o: FuseOptions) {
     if (lit !== f.generation) return
     const conv = await o.conversation().catch(() => null)
     if (conv === null || conv < o.minTokens) return
-    $.ui.status(`◆ Mission Control compacts at ${clockOf(fireAt)} unless you send a message · the cache expires at ${clockOf(cache.end)} · ${tok(conv)} tokens of conversation`)
+    $.ui.status(`◆ Usage Coach compacts at ${clockOf(fireAt)} unless you send a message · the cache expires at ${clockOf(cache.end)} · ${tok(conv)} tokens of conversation`)
     f.hasStatus = true
   }))
 
@@ -81,7 +81,7 @@ export async function light($: EngineInterface, f: Fuse, o: FuseOptions) {
     const at = await $.clock.now()
     // A timer that fires late (the Mac slept) finds the cache expired: compacting then saves nothing.
     if (at >= cache.end) {
-      $.ui.log(`◆ Mission Control did not compact: the cache expired at ${clockOf(cache.end)} while the Mac was asleep`)
+      $.ui.log(`◆ Usage Coach did not compact: the cache expired at ${clockOf(cache.end)} while the Mac was asleep`)
       defuse($, f)
       return
     }
@@ -93,7 +93,7 @@ export async function light($: EngineInterface, f: Fuse, o: FuseOptions) {
     const done = await compactNow($, o, instructions(clockOf(at), clockOf(cache.end)))
     if (lit !== f.generation) return
     if (done) {
-      $.ui.status(`◆ Mission Control compacted at ${clockOf(at)}, before the cache expired · ${tok(conv)} tokens of conversation`)
+      $.ui.status(`◆ Usage Coach compacted at ${clockOf(at)}, before the cache expired · ${tok(conv)} tokens of conversation`)
       f.hasStatus = true
     } else {
       defuse($, f)

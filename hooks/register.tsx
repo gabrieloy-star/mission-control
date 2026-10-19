@@ -1,7 +1,7 @@
-// Mission Control: where your tokens go, and the one suggestion that saves the most right now.
+// Usage Coach: where your tokens go, and the one suggestion that saves the most right now.
 //   The strip above the prompt: context, prompt cache, usage limits (5 hours and 7 days),
 //   session cost, and the suggestion, on one key. An optional line after each answer. A note
-//   under large tool outputs and every subagent. A tip in the empty prompt. The side pane (/mission).
+//   under large tool outputs and every subagent. A tip in the empty prompt. The side pane (/usage-coach).
 //   Idle compact compacts a quiet session a few minutes before its prompt cache expires.
 // It only reads figures Claude already reports and never writes into the conversation:
 // watching costs no tokens. The one thing that spends is a compaction, when it saves more.
@@ -19,8 +19,8 @@ import { defuse, light, newFuse } from './idle'
 import { insightsOf } from './insights'
 import type { FuseOptions } from './idle'
 
-const PLUGIN = 'mission-control'
-const PANE = 'mission'
+const PLUGIN = 'usage-coach'
+const PANE = 'usage-coach'
 const PANE_COLUMNS = 56
 const WEEK_KEY = 'week'
 const WEEK_FRESH = 2 * HOUR
@@ -34,11 +34,11 @@ const EMPTY: Live = {
   limits: [], usd: null, turnBase: null, turns: [], weights: [], mcp: [], mcpUsed: [], budgetWarned: false, lastToastAt: 0,
 }
 
-const live = atom({ plugin: 'mission-control', key: 'live' } as const, EMPTY as Live)
-const tab = atom({ plugin: 'mission-control', key: 'tab' } as const, 'moves' as Tab)
-const week = atom({ plugin: 'mission-control', key: 'week' } as const, null as Week | null)
-const weekBusy = atom({ plugin: 'mission-control', key: 'weekBusy' } as const, false)
-const categories = atom({ plugin: 'mission-control', key: 'categories' } as const, [] as Category[])
+const live = atom({ plugin: 'usage-coach', key: 'live' } as const, EMPTY as Live)
+const tab = atom({ plugin: 'usage-coach', key: 'tab' } as const, 'moves' as Tab)
+const week = atom({ plugin: 'usage-coach', key: 'week' } as const, null as Week | null)
+const weekBusy = atom({ plugin: 'usage-coach', key: 'weekBusy' } as const, false)
+const categories = atom({ plugin: 'usage-coach', key: 'categories' } as const, [] as Category[])
 
 /** The window compaction is measured against (a smaller compaction window when one is set). */
 let effectiveWindow: number | null = null
@@ -116,23 +116,23 @@ async function conversationNow($: EngineInterface): Promise<number | null> {
 
 // ---------- Actions ----------
 
-const ASKED = 'The user asked Mission Control to compact now to keep the next messages cheap. Preserve open tasks, decisions with their reasons, pending follow-ups, files touched, and anything the user asked to keep.'
+const ASKED = 'The user asked Usage Coach to compact now to keep the next messages cheap. Preserve open tasks, decisions with their reasons, pending follow-ups, files touched, and anything the user asked to keep.'
 
 /**
  * Compacts from the strip or the pane. Always through /compact, which the engine queues while
  * Claude is answering and runs as soon as the session is idle: pressing never fails mid-answer.
  */
 async function compactFromStrip($: EngineInterface) {
-  if (isCompactQueued) return $.ui.toast('Mission Control: the compaction is already queued')
+  if (isCompactQueued) return $.ui.toast('Usage Coach: the compaction is already queued')
   const conv = conversationOf(await read($, live))
-  if (conv > 0 && conv < 5_000) return $.ui.toast(`Mission Control: only ${tok(conv)} tokens of conversation, nothing worth compacting yet`)
+  if (conv > 0 && conv < 5_000) return $.ui.toast(`Usage Coach: only ${tok(conv)} tokens of conversation, nothing worth compacting yet`)
   isCompactQueued = true
   $.ui.invalidate('ui.render')
   $.ui.toast(isTurnRunning
-    ? 'Mission Control: compaction queued, it runs as soon as Claude finishes this answer'
-    : 'Mission Control: compacting now')
+    ? 'Usage Coach: compaction queued, it runs as soon as Claude finishes this answer'
+    : 'Usage Coach: compacting now')
   void $.command.run({ command: 'compact', args: ASKED })
-    .catch(() => $.ui.toast('Mission Control: the compaction did not run. Type /compact'))
+    .catch(() => $.ui.toast('Usage Coach: the compaction did not run. Type /compact'))
     .finally(() => {
       isCompactQueued = false
       $.ui.invalidate('ui.render')
@@ -147,8 +147,8 @@ async function togglePane($: EngineInterface) {
     return
   }
   await readBreakdown($).catch(() => {})
-  const opened = await $.ui.open({ id: PANE, title: 'Mission Control', columns: PANE_COLUMNS })
-  if (!opened.isPlaced) $.ui.toast(`Mission Control: the pane did not open here (${(opened as any).reason ?? 'no room'})`)
+  const opened = await $.ui.open({ id: PANE, title: 'Usage Coach', columns: PANE_COLUMNS })
+  if (!opened.isPlaced) $.ui.toast(`Usage Coach: the pane did not open here (${(opened as any).reason ?? 'no room'})`)
 }
 
 /** Opens the pane on the Insights tab, or switches to it when the pane is already open. */
@@ -157,8 +157,8 @@ async function openInsights($: EngineInterface) {
   void readWeek($).catch(() => {})
   const mine = (await $.ui.panes()).find(p => p.id === PANE)
   if (mine && mine.isPlaced) return $.ui.invalidate('ui.render')
-  const opened = await $.ui.open({ id: PANE, title: 'Mission Control', columns: PANE_COLUMNS })
-  if (!opened.isPlaced) $.ui.toast(`Mission Control: the pane did not open here (${(opened as any).reason ?? 'no room'})`)
+  const opened = await $.ui.open({ id: PANE, title: 'Usage Coach', columns: PANE_COLUMNS })
+  if (!opened.isPlaced) $.ui.toast(`Usage Coach: the pane did not open here (${(opened as any).reason ?? 'no room'})`)
 }
 
 /** Insights already announced by a toast in this session. */
@@ -186,7 +186,7 @@ async function readWeek($: EngineInterface, force = false) {
         // This node is missing: try the next one.
       }
     }
-    $.ui.toast('Mission Control: could not read the week (Node.js not found)')
+    $.ui.toast('Usage Coach: could not read the week (Node.js not found)')
   } finally {
     await update($, weekBusy, () => false)
   }
@@ -264,7 +264,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    await $.command.register({ name: 'mission', description: 'Mission Control: where your tokens go, and the move that saves the most' })
+    await $.command.register({ name: 'usage-coach', description: 'Usage Coach: where your tokens go, and the change that saves the most' })
     ticker?.cancel()
     // The fuse and the race move with the clock.
     ticker = $.clock.every(30_000, () => $.ui.invalidate('ui.render'))
@@ -283,7 +283,7 @@ export const register: Register = (on, options) => {
   })
 
   // Answered here, so nothing reaches the model: the command costs no tokens.
-  on('command.run', { command: 'mission' }, async $ => {
+  on('command.run', { command: 'usage-coach' }, async $ => {
     await togglePane($)
     return {}
   })
@@ -378,7 +378,7 @@ export const register: Register = (on, options) => {
 
       // The ledger line, when turned on: a dim transcript row, never sent to the model.
       if (s.telemetry && usd >= 0.01) {
-        const bits = [seconds(e.durationMs), added ? '+' + tok(added) + ' payload' : '', money(usd), `${Math.round(turn.cached * 100)}% from cache`]
+        const bits = [seconds(e.durationMs), added ? '+' + tok(added) + ' context' : '', money(usd), `${Math.round(turn.cached * 100)}% from cache`]
         if (turn.agentShare >= 0.2) bits.push(`subagents ${Math.round(turn.agentShare * 100)}%`)
         if (turn.isCold) bits.push('cache had expired')
         $.ui.log('◆ ' + bits.filter(Boolean).join(' · '))
@@ -389,16 +389,16 @@ export const register: Register = (on, options) => {
       if (s.budget > 0 && after.usd !== null && !after.budgetWarned) {
         if (after.usd >= s.budget) {
           await update($, live, x => ({ ...x, budgetWarned: true }))
-          $.ui.toast(`Mission Control: this session has cost ${money(after.usd)}, over your ${money(s.budget)} budget`)
+          $.ui.toast(`Usage Coach: this session has cost ${money(after.usd)}, over your ${money(s.budget)} budget`)
         }
       }
       const top = movesOf(after, now, s)[0]
-      if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Mission Control: ${tipOf(top)}`)
+      if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Usage Coach: ${tipOf(top)}`)
       // A model that does not fit the work is said once per session; the rest waits in Insights.
       const fit = insightsOf(after, await read($, week)).find(i => i.kind === 'model' && i.tone !== 'calm' && !toldInsights.has(i.id))
       if (fit) {
         toldInsights.add(fit.id)
-        await toastOnce($, `Mission Control insight: ${fit.title} · press i`)
+        await toastOnce($, `Usage Coach insight: ${fit.title} · press i`)
       }
     } catch {
       // No reading this turn: the strip keeps the last one.

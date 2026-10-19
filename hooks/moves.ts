@@ -34,7 +34,7 @@ export type Move = {
   /** Estimated saving in dollars, per `unit`. */
   usd: number
   unit: 'now' | 'per message' | 'per 1,000 messages' | 'per search' | 'over the next 10 messages'
-  /** The strip key that does it, when Mission Control can do it itself. */
+  /** The strip key that does it, when Usage Coach can do it itself. */
   key?: 'c'
   tone: 'calm' | 'warn' | 'hot'
   /** Ranking: the saving over an hour of work. */
@@ -153,7 +153,7 @@ export function movesOf(live: Live, now: number, s: Settings): Move[] {
       id: 'break', tone: 'warn', unit: 'now', usd, score: usd, key: 'c',
       title: 'Compact before the cache expires',
       short: 'compact now',
-      how: `The cache expires at ${clockOf(end)}. A message after that pays ${money(rewriteUsd(tokens, model))} to send all ${tok(tokens)} tokens again. Press c, or type /compact. If you step away, Mission Control compacts a few minutes before it expires.`,
+      how: `The cache expires at ${clockOf(end)}. A message after that pays ${money(rewriteUsd(tokens, model))} to send all ${tok(tokens)} tokens again. Press c, or type /compact. If you step away, Usage Coach compacts a few minutes before it expires.`,
     })
   }
 

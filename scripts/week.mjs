@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Mission Control's week scanner: sums the token usage Claude Code recorded in your local
+// Usage Coach's week scanner: sums the token usage Claude Code recorded in your local
 // transcripts (~/.claude/projects) over the last N days. Reads files only; sends nothing.
 // Usage: node week.mjs [--days 7] [--root <projects dir>]
 // Prints one JSON object: tokens by model for main conversations and subagents, subagent runs

@@ -1,4 +1,4 @@
-// The Mission Control pane: a status line, then Suggestions (what to do), Context (what every
+// The Usage Coach pane: a status line, then Suggestions (what to do), Context (what every
 // message sends), Session (this session, message by message), History (the last 7 days) and
 // Insights (model fit and good habits).
 // Pure drawing. Each tab opens on a row of readout tiles. The desktop draws its bars and charts
@@ -152,11 +152,9 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   if (p.tab === 'moves') {
     if (p.moves.length === 0) {
       body = [
-        ...(desktop ? [Svg({ key: 'orbit', alt: 'All good', width: W, height: 84, source: svg(W, 84,
-          `<ellipse cx="${W / 2}" cy="42" rx="${Math.min(160, W / 2 - 12)}" ry="24" fill="none" stroke="${INK.mint}" stroke-opacity="0.35" stroke-width="1.2"/>` +
-          `<ellipse cx="${W / 2}" cy="42" rx="${Math.min(100, W / 3)}" ry="14" fill="none" stroke="${INK.mint}" stroke-opacity="0.2" stroke-dasharray="2 4"/>` +
-          `<circle cx="${W / 2}" cy="42" r="10" fill="${INK.cobalt}" opacity="0.9"/>` +
-          `<circle cx="${W / 2 + Math.min(160, W / 2 - 12) * 0.8}" cy="27" r="4" fill="${INK.mint}"/>`) })] : []),
+        ...(desktop ? [Svg({ key: 'check', alt: 'All good', width: W, height: 84, source: svg(W, 84,
+          `<circle cx="${W / 2}" cy="42" r="28" fill="${INK.mint}" fill-opacity="0.12" stroke="${INK.mint}" stroke-opacity="0.6" stroke-width="1.5"/>` +
+          `<path d="M ${W / 2 - 12} 43 l 8 8 l 16 -17" fill="none" stroke="${INK.mint}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`) })] : []),
         Text({ key: 'ok', bold: true, color: INK.mint, children: 'All good' }),
         Text({ key: 'why', dimColor: true, children: 'Nothing worth changing right now. A suggestion appears here when a change would save real money.' }),
       ]
@@ -347,7 +345,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
     ])]
     body.push(caption('mh', 'Model fit', model.length ? undefined : 'looks right'))
     if (model.length) model.forEach((i, n) => body.push(card('m' + n, i)))
-    else body.push(Text({ key: 'm-ok', dimColor: true, children: live.turns.length >= 4 ? 'The model matches the work so far.' : 'A few more messages and Mission Control can tell whether the model fits the work.' }))
+    else body.push(Text({ key: 'm-ok', dimColor: true, children: live.turns.length >= 4 ? 'The model matches the work so far.' : 'A few more messages and Usage Coach can tell whether the model fits the work.' }))
     body.push(caption('hh', 'This session', habits.length ? undefined : 'nothing to change'))
     if (habits.length) habits.forEach((i, n) => body.push(card('h' + n, i)))
     else body.push(Text({ key: 'h-ok', dimColor: true, children: 'Cache, context and subagents look healthy.' }))

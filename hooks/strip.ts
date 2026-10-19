@@ -332,7 +332,7 @@ export function statusCard(s: StripInput): Card {
   } else {
     rows.push({ label: 'Fable · 7 days: reading the week…' })
   }
-  rows.push({ label: 'Click details (or press O) to open the Mission Control panel' })
+  rows.push({ label: 'Click details (or press O) to open the Usage Coach panel' })
   return { title: 'Session status', rows, isRight: true }
 }
 

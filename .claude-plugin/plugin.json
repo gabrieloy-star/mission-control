@@ -1,7 +1,7 @@
 {
-  "name": "mission-control",
+  "name": "usage-coach",
   "version": "1.0.0",
-  "description": "Mission Control: one strip above the prompt (context, prompt cache, usage limits, session cost) that ends with the suggestion that saves the most right now, a side pane with the details, and insights on model fit and good habits. Reads only figures Claude already reports: it costs no tokens to watch.",
+  "description": "Usage Coach: one strip above the prompt (context, prompt cache, usage limits, session cost) that ends with the suggestion that saves the most right now, a side pane with the details, and insights on model fit and good habits. Reads only figures Claude already reports: it costs no tokens to watch.",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Gabriel"

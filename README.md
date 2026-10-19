@@ -1,10 +1,10 @@
-# Mission Control
+# Usage Coach
 
 **See where your Claude Code tokens go, and the one change that saves the most right now.**
 
-Mission Control is a Claude Code mod. It adds a strip above the prompt and a side pane, both built only from figures Claude Code already reports. Watching it costs **zero tokens**: it never calls the model and never sends anything anywhere.
+Usage Coach is a Claude Code mod. It adds a strip above the prompt and a side pane, both built only from figures Claude Code already reports. Watching it costs **zero tokens**: it never calls the model and never sends anything anywhere.
 
-![Mission Control overview](docs/overview.png)
+![Usage Coach overview](docs/overview.png)
 
 ## Why
 
@@ -14,7 +14,7 @@ A long session gets expensive in ways that are hard to see:
 - the prompt cache keeps that resend cheap, but it expires after an hour, and the next message pays full price to send everything again;
 - subagents, large tool outputs, unused MCP servers and a model bigger than the work quietly add cost.
 
-Mission Control makes each of those visible and tells you what to do about it.
+Usage Coach makes each of those visible and tells you what to do about it.
 
 ## The strip above the prompt
 
@@ -32,7 +32,7 @@ One line that fits the width of the prompt. When space runs short, the least imp
 
 ## The side pane
 
-Open it with `/mission`, the **details** button or **O**. It has five tabs.
+Open it with `/usage-coach`, the **details** button or **O**. It has five tabs.
 
 - **Suggestions.** Every change worth making now, ranked by how much it saves, each with a one-line reason:
   - compact, or start a new session once the cache has expired on a large context;
@@ -62,11 +62,11 @@ Open it with `/mission`, the **details** button or **O**. It has five tabs.
 
 ## Idle compact
 
-If you leave a large session idle, Mission Control compacts it 5 minutes before the 1-hour prompt cache expires. Coming back then costs a short summary instead of sending the whole conversation again. Small conversations are left alone, and so is a session on the 5-minute cache, which leaves no time to act.
+If you leave a large session idle, Usage Coach compacts it 5 minutes before the 1-hour prompt cache expires. Coming back then costs a short summary instead of sending the whole conversation again. Small conversations are left alone, and so is a session on the 5-minute cache, which leaves no time to act.
 
 ## Settings
 
-Change these with `/plugin configure mission-control@gabriel-mods`.
+Change these with `/plugin configure usage-coach@gabriel-mods`.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -81,13 +81,13 @@ Change these with `/plugin configure mission-control@gabriel-mods`.
 In Claude Code:
 
 ```
-/plugin marketplace add gabrieloy-star/mission-control
-/plugin install mission-control@gabriel-mods
+/plugin marketplace add gabrieloy-star/usage-coach
+/plugin install usage-coach@gabriel-mods
 ```
 
 Then start a new session.
 
-To remove it: `/plugin uninstall mission-control@gabriel-mods`.
+To remove it: `/plugin uninstall usage-coach@gabriel-mods`.
 
 ## Credits
 

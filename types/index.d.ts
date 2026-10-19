@@ -95,7 +95,7 @@ export type Category = { name: string; tokens: number }
 
 declare module 'claude-code' {
   interface PluginState {
-    'mission-control': {
+    'usage-coach': {
       live: Live
       tab: Tab
       week: Week | null
