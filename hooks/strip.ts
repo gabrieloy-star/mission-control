@@ -52,6 +52,8 @@ export type StripInput = {
   onSuggestion: () => void
   /** A compaction is queued: the button says so until it runs. */
   isQueued?: boolean
+  /** When idle compact runs if you send nothing first; null when it will not. */
+  idleAt?: number | null
   onOpen: () => void
   onInsights: () => void
   /** First session after install: a short welcome above the strip until "got it". */
@@ -204,7 +206,8 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
       tip: tipText({
         name: 'Prompt cache', now: left > 0 ? `valid until ${clockOf(cacheEnd(live)!)}` : 'expired', tone: state as Tone,
         what: left > 0
-          ? [`A ${ttl >= HOUR ? '1-hour' : '5-minute'} cache: while it lasts, each message reads the context at a fraction of the price`, 'After it expires, the next message pays full price to send it all again']
+          ? [`A ${ttl >= HOUR ? '1-hour' : '5-minute'} cache: while it lasts, each message reads the context at a fraction of the price`, 'After it expires, the next message pays full price to send it all again',
+            s.idleAt && s.idleAt > now ? `If you send nothing, Usage Coach compacts at ${clockOf(s.idleAt)}` : 'Idle compact: off for this session (small conversation or short cache)']
           : ['The next message pays full price to send the whole context again'],
         todo: state === 'hot' ? 'compact before your next message (press c), or start a new session'
           : state === 'warn' ? `send your next message before ${clockOf(cacheEnd(live)!)}, or compact (press c) before a break`

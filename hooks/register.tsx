@@ -276,6 +276,13 @@ function weightOf(id: string, tool: string, input: any, result: any): Weight | n
   return size >= HEAVY_OUTPUT ? { id, tool, isAgent: false, label: labelOf(tool, input), tokens: size } : null
 }
 
+/** When idle compact will run if no message comes first; null when it will not run. */
+function idleAtOf(l: Live): number | null {
+  const end = cacheEnd(l)
+  if (settings.leadMs <= 0 || end === null || ttlOf(l) < 30 * MINUTE || conversationOf(l) < settings.minTokens) return null
+  return end - settings.leadMs
+}
+
 // ---------- Hooks ----------
 
 let settings = settingsOf(undefined)
@@ -330,6 +337,9 @@ export const register: Register = (on, options) => {
     } catch {
       // The strip fills in after the first answer.
     }
+    // A reload (or /reload-plugins) drops the idle timer with the old module: set it again from the
+    // cache the state kept, so a quiet session is still compacted before the cache expires.
+    if (!isTurnRunning) void startIdle($, idleTimer, idleOptions($)).catch(() => {})
     $.ui.invalidate('ui.render')
     return result
   })
@@ -558,6 +568,7 @@ export const register: Register = (on, options) => {
       desktop: e.surface === 'desktop',
       onSuggestion: () => void compactFromStrip($),
       isQueued: isCompactQueued,
+      idleAt: idleAtOf(l),
       onOpen: () => void togglePane($),
       onInsights: () => void openInsights($),
       isWelcome: await read($, isWelcome),

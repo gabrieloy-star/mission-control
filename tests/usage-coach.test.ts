@@ -332,3 +332,10 @@ test('a chart whose top message costs under a cent still draws', () => {
   expect(text).not.toContain('>< $0.01<')
   expect(text).toContain('earlier request')
 })
+
+test('the cache tooltip says when idle compact will run', () => {
+  const l = live({ cacheAt: NOW - 10 * MINUTE })
+  const base = { live: l, week: null, move: undefined, insights: 0, now: NOW, columns: 200, desktop: true, onSuggestion() {}, onOpen() {}, onInsights() {} } as any
+  expect(JSON.stringify(drawStrip(el, { ...base, idleAt: NOW + 45 * MINUTE }))).toContain('Usage Coach compacts at')
+  expect(JSON.stringify(drawStrip(el, { ...base, idleAt: null }))).toContain('Idle compact: off for this session')
+})
