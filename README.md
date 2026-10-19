@@ -4,7 +4,11 @@
 
 Usage Coach is a Claude Code mod. It adds a strip above the prompt and a side pane, both built only from figures Claude Code already reports. Watching it costs **zero tokens**: it never calls the model and never sends anything anywhere.
 
-![Usage Coach overview](docs/overview.png)
+![The strip above the prompt](docs/img/strip.png)
+
+![The side pane](docs/img/pane-suggestions.png)
+
+Screenshots use demo data. The full overview is in `docs/overview.html`.
 
 ## Why
 
