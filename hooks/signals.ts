@@ -3,7 +3,7 @@
 // no model call, no tokens. Pure.
 
 import type { Limit, LimitSample, Loop, Saving, Tokens, Turn, Week } from '../types'
-import { HOUR, LOOP_AT, MINUTE } from './moves'
+import { HOUR, LOOP_AT, MINUTE } from './suggestions'
 import { tokensUsd } from './prices'
 
 // ---------- Limit forecast ----------

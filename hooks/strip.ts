@@ -5,8 +5,8 @@
 // terminal draws them with glyphs.
 
 import type { Limit, Live, Week } from '../types'
-import { HEAVY_AT, HOUR, cacheEnd, cacheLeft, cacheWarnAt, clockOf, money, savingOf, span, tok, ttlOf } from './moves'
-import type { Move } from './moves'
+import { HEAVY_AT, HOUR, cacheEnd, cacheLeft, cacheWarnAt, clockOf, money, savingOf, span, tok, ttlOf } from './suggestions'
+import type { Suggestion } from './suggestions'
 import { sumTokens, tokensUsd } from './prices'
 import { paceOf, tasksOf } from './signals'
 
@@ -43,13 +43,13 @@ export type StripInput = {
   live: Live
   /** The last 7 days, when History has read them: the details card's Fable line. */
   week: Week | null
-  move: Move | undefined
+  suggestion: Suggestion | undefined
   /** How many insights are open: the count on the insights button. */
   insights: number
   now: number
   columns: number
   desktop: boolean
-  onMove: () => void
+  onSuggestion: () => void
   /** A compaction is queued: the button says so until it runs. */
   isQueued?: boolean
   onOpen: () => void
@@ -62,12 +62,12 @@ export type StripInput = {
 // ---------- Gauges ----------
 
 /** The context gauge's scale: the window compaction is measured against; the mark at 85% of it. */
-function tankScale(live: Live) {
+function contextScale(live: Live) {
   return { scale: live.window || HEAVY_AT, notch: 0.85 }
 }
 
-function tankCells(live: Live, cells: number) {
-  const { scale, notch } = tankScale(live)
+function contextCells(live: Live, cells: number) {
+  const { scale, notch } = contextScale(live)
   const tokens = Math.min(live.tokens ?? 0, scale)
   const fixed = Math.min(live.fixed ?? 0, tokens)
   const add = Math.min(live.adds[live.adds.length - 1] ?? 0, tokens - fixed)
@@ -77,9 +77,9 @@ function tankCells(live: Live, cells: number) {
   return { f, used, fresh: Math.min(fresh, used - f), notchAt: Math.round(notch * cells) }
 }
 
-function tankSvg(live: Live): string {
+function contextSvg(live: Live): string {
   const n = 24, w = 3, g = 1, h = 12
-  const c = tankCells(live, n)
+  const c = contextCells(live, n)
   let rects = ''
   for (let i = 0; i < n; i++) {
     const fill = i < c.f ? INK.grey : i < c.used ? INK.cobalt : INK.grey
@@ -92,13 +92,13 @@ function tankSvg(live: Live): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${h}" viewBox="0 0 ${width} ${h}">${rects}</svg>`
 }
 
-function fuseState(left: number, warn: number) {
+function cacheState(left: number, warn: number) {
   return left <= 0 ? 'hot' : left < warn ? 'warn' : 'calm'
 }
 
-function fuseSvg(left: number, ttl: number, warn: number): string {
+function cacheSvg(left: number, ttl: number, warn: number): string {
   const W = 52, H = 12
-  const color = TONE[fuseState(left, warn)]!
+  const color = TONE[cacheState(left, warn)]!
   const x = Math.max(4, Math.min(1, left / ttl) * (W - 8) + 4)
   const burnt = `<line x1="${x}" y1="6" x2="${W - 1}" y2="6" stroke="${INK.grey}" stroke-width="1.2" stroke-dasharray="1.5 2.5" opacity="0.7"/>`
   if (left <= 0) {
@@ -112,7 +112,7 @@ function fuseSvg(left: number, ttl: number, warn: number): string {
 const SPANS: Record<string, number> = { five_hour: 5 * HOUR, seven_day: 7 * 24 * HOUR }
 const LABELS: Record<string, string> = { five_hour: '5h', seven_day: '7d' }
 
-export function raceOf(limit: Limit, now: number) {
+export function limitOf(limit: Limit, now: number) {
   const total = SPANS[limit.kind]
   const reset = Date.parse(limit.resetsAt ?? '')
   const left = Number.isNaN(reset) ? null : reset - now
@@ -124,7 +124,7 @@ export function raceOf(limit: Limit, now: number) {
 }
 
 /** Usage left as the bar, time left in the window as the ring. */
-function raceSvg(used: number, clock: number | null, tone: string): string {
+function limitSvg(used: number, clock: number | null, tone: string): string {
   const W = 40, H = 10
   const xu = 3 + ((100 - used) / 100) * (W - 6)
   const color = TONE[tone]!
@@ -155,7 +155,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     const addText = add > 0 ? '+' + tok(add) : ''
     const gauge = desktop ? cellsOf(96) : 13
     parts.push({
-      key: 'tank', rank: 1, cells: gauge + 1 + value.length + (addText ? 1 + addText.length : 0),
+      key: 'context', rank: 1, cells: gauge + 1 + value.length + (addText ? 1 + addText.length : 0),
       tip: (() => {
         const pct = Math.round(((live.tokens ?? 0) / (live.window || 1)) * 100)
         const tone: Tone = pct >= 85 ? 'hot' : pct >= 60 ? 'warn' : 'calm'
@@ -173,9 +173,9 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
       })(),
       draw: () => {
         const out: unknown[] = []
-        if (desktop) out.push(Svg({ key: 'g', source: tankSvg(live), width: 95, height: 12, alt: `Context: ${value} of ${tok(live.window)}` }))
+        if (desktop) out.push(Svg({ key: 'g', source: contextSvg(live), width: 95, height: 12, alt: `Context: ${value} of ${tok(live.window)}` }))
         else {
-          const c = tankCells(live, 12)
+          const c = contextCells(live, 12)
           const glyphs: unknown[] = []
           for (let i = 0; i < 12; i++) {
             if (i === c.notchAt) glyphs.push(Text({ key: 'n', color: INK.coral, children: '│' }))
@@ -197,10 +197,10 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
   if (left !== null) {
     const ttl = ttlOf(live)
     const warn = cacheWarnAt(live)
-    const state = fuseState(left, warn)
+    const state = cacheState(left, warn)
     const value = span(left)
     parts.push({
-      key: 'fuse', rank: 3, cells: (desktop ? cellsOf(52) : 7) + 1 + value.length,
+      key: 'idleTimer', rank: 3, cells: (desktop ? cellsOf(52) : 7) + 1 + value.length,
       tip: tipText({
         name: 'Prompt cache', now: left > 0 ? `valid until ${clockOf(cacheEnd(live)!)}` : 'expired', tone: state as Tone,
         what: left > 0
@@ -212,7 +212,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
       }),
       draw: () => {
         const out: unknown[] = []
-        if (desktop) out.push(Svg({ key: 'g', source: fuseSvg(left, ttl, warn), width: 52, height: 12, alt: `Prompt cache: ${value} left` }))
+        if (desktop) out.push(Svg({ key: 'g', source: cacheSvg(left, ttl, warn), width: 52, height: 12, alt: `Prompt cache: ${value} left` }))
         else {
           const r = left <= 0 ? 0 : Math.max(1, Math.min(6, Math.round((left / ttl) * 6)))
           const glyph = left <= 0 ? '✕' + '┄'.repeat(6) : '━'.repeat(r - 1) + '✦' + '┄'.repeat(7 - r)
@@ -226,13 +226,13 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
 
   // Usage limits: 5 hours, then 7 days
   live.limits.forEach((limit, i) => {
-    const r = raceOf(limit, now)
+    const r = limitOf(limit, now)
     if (r.left !== null && r.left <= 0) return
     const value = Math.max(0, 100 - Math.round(r.used)) + '%'
     const pace = paceOf(limit, live.limitSamples?.[limit.kind], now)
     const tone: Tone = pace?.isShort ? (pace.tone === 'hot' || r.tone === 'hot' ? 'hot' : 'warn') : r.tone as Tone
     parts.push({
-      key: 'race-' + limit.kind, rank: limit.kind === 'five_hour' ? 5 : 6 + i, cells: r.label.length + 1 + (desktop ? cellsOf(40) : 6) + 1 + value.length,
+      key: 'limit-' + limit.kind, rank: limit.kind === 'five_hour' ? 5 : 6 + i, cells: r.label.length + 1 + (desktop ? cellsOf(40) : 6) + 1 + value.length,
       tip: tipText({
         name: `${limit.kind === 'five_hour' ? '5-hour' : limit.kind === 'seven_day' ? 'Weekly' : r.label} usage limit`, now: `${value} left`, tone,
         what: [
@@ -245,7 +245,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
       }),
       draw: () => {
         const out: unknown[] = [Text({ key: 'l', dimColor: true, children: r.label })]
-        if (desktop) out.push(Svg({ key: 'g', source: raceSvg(r.used, r.clock, tone), width: 40, height: 10, alt: `Usage limit ${r.label}: ${value} left` }))
+        if (desktop) out.push(Svg({ key: 'g', source: limitSvg(r.used, r.clock, tone), width: 40, height: 10, alt: `Usage limit ${r.label}: ${value} left` }))
         else {
           const u = Math.round(((100 - r.used) / 100) * 6)
           const c = r.clock === null ? -1 : Math.min(5, Math.round(((100 - r.clock) / 100) * 6))
@@ -283,24 +283,24 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
   }
 
   // The suggestion
-  const move = s.move
-  const long = move ? `${move.short}${move.usd > 0.01 ? ' · saves ' + money(move.usd) + (move.unit === 'now' ? '' : ' ' + move.unit) : ''}` : 'all good'
-  const short = move ? `${move.short}${move.usd > 0.01 && move.unit === 'now' ? ' ' + money(move.usd) : ''}` : 'all good'
-  const moveCells = (label: string) => label.length + (move?.key ? 7 : 2)
-  const drawMove = (label: string) => () => {
-    if (!move) return [Text({ key: 'm', color: INK.mint, children: MARK.calm + ' ' + label })]
-    if (move.key && s.isQueued) return [Text({ key: 'm', color: INK.amber, children: MARK.warn + ' compaction queued' })]
-    if (move.key) return [Button({ key: 'move', label, hotkey: move.key, variant: 'primary', onPress: s.onMove })]
-    return [Text({ key: 'm', color: TONE[move.tone], children: MARK[move.tone] + ' ' + label })]
+  const suggestion = s.suggestion
+  const long = suggestion ? `${suggestion.short}${suggestion.usd > 0.01 ? ' · saves ' + money(suggestion.usd) + (suggestion.unit === 'now' ? '' : ' ' + suggestion.unit) : ''}` : 'all good'
+  const short = suggestion ? `${suggestion.short}${suggestion.usd > 0.01 && suggestion.unit === 'now' ? ' ' + money(suggestion.usd) : ''}` : 'all good'
+  const suggestionCells = (label: string) => label.length + (suggestion?.key ? 7 : 2)
+  const drawSuggestion = (label: string) => () => {
+    if (!suggestion) return [Text({ key: 'm', color: INK.mint, children: MARK.calm + ' ' + label })]
+    if (suggestion.key && s.isQueued) return [Text({ key: 'm', color: INK.amber, children: MARK.warn + ' compaction queued' })]
+    if (suggestion.key) return [Button({ key: 'suggestion', label, hotkey: suggestion.key, variant: 'primary', onPress: s.onSuggestion })]
+    return [Text({ key: 'm', color: TONE[suggestion.tone], children: MARK[suggestion.tone] + ' ' + label })]
   }
-  const moveTip = move
+  const suggestionTip = suggestion
     ? tipText({
-      name: 'Suggestion', now: move.title, tone: move.tone,
-      what: [savingOf(move) ? 'Saves' + savingOf(move).replace(' · saves', '') : ''],
-      todo: move.how,
+      name: 'Suggestion', now: suggestion.title, tone: suggestion.tone,
+      what: [savingOf(suggestion) ? 'Saves' + savingOf(suggestion).replace(' · saves', '') : ''],
+      todo: suggestion.how,
     })
     : tipText({ name: 'Suggestion', now: 'none', tone: 'calm', what: ['No change would save $1 or more right now'], todo: 'nothing' })
-  parts.push({ key: 'move', rank: 2, cells: moveCells(long), draw: drawMove(long), tip: moveTip })
+  parts.push({ key: 'suggestion', rank: 2, cells: suggestionCells(long), draw: drawSuggestion(long), tip: suggestionTip })
   const insightLabel = s.insights ? `insights ${s.insights}` : 'insights'
   parts.push({
     key: 'insights', rank: 2.5, cells: insightLabel.length + 7,
@@ -313,7 +313,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
   })
   parts.push({ key: 'open', rank: 1.5, cells: 11, draw: () => [Button({ key: 'open', label: 'details', hotkey: 'o', onPress: s.onOpen })], card: statusCard(s) })
 
-  // Fit: keep parts by rank while they fit; a long move label gives way to the short one first.
+  // Fit: keep parts by rank while they fit; a long suggestion label gives way to the short one first.
   const fit = (list: Part[]) => {
     const kept: Part[] = []
     let used = 0
@@ -327,11 +327,11 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
     return kept
   }
   let kept = fit(parts)
-  if (!kept.some(p => p.key === 'move') || kept.length < Math.min(parts.length, 4)) {
-    const shorter = parts.map(p => (p.key === 'move' ? { ...p, cells: moveCells(short), draw: drawMove(short) } : p))
+  if (!kept.some(p => p.key === 'suggestion') || kept.length < Math.min(parts.length, 4)) {
+    const shorter = parts.map(p => (p.key === 'suggestion' ? { ...p, cells: suggestionCells(short), draw: drawSuggestion(short) } : p))
     kept = fit(shorter)
   }
-  const order = ['tank', 'fuse', 'race-five_hour', 'race-seven_day', 'spend', 'move', 'insights', 'open']
+  const order = ['context', 'idleTimer', 'limit-five_hour', 'limit-seven_day', 'spend', 'suggestion', 'insights', 'open']
   kept.sort((a, b) => (order.indexOf(a.key) + 99) % 99 - (order.indexOf(b.key) + 99) % 99)
 
   const line = Box({
@@ -386,7 +386,7 @@ export function statusCard(s: StripInput): Card {
   rows.push({ label: 'This session', value: [elapsed, model, live.usd !== null ? money(live.usd) : ''].filter(Boolean).join(' · ') })
   const names: Record<string, string> = { five_hour: '5-hour limit', seven_day: 'Weekly limit', spend_limit: 'Spend limit' }
   for (const limit of live.limits) {
-    const r = raceOf(limit, now)
+    const r = limitOf(limit, now)
     const left = Math.max(0, 100 - Math.round(r.used))
     const resets = r.left !== null && r.left > 0 ? ` · resets in ${span(r.left)}` : ''
     const pace = paceOf(limit, live.limitSamples?.[limit.kind], now)

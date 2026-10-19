@@ -25,7 +25,7 @@ export type Settings = {
   minSaving: number
 }
 
-export type Move = {
+export type Suggestion = {
   id: string
   /** The headline: the action, in plain words. */
   title: string
@@ -118,8 +118,8 @@ function lastAgent(weights: Weight[]): Weight | undefined {
 
 // ---------- The rules ----------
 
-export function movesOf(live: Live, now: number, s: Settings): Move[] {
-  const out: Move[] = []
+export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[] {
+  const out: Suggestion[] = []
   const tokens = live.tokens ?? 0
   const conv = conversationOf(live)
   const left = cacheLeft(live, now)
@@ -232,20 +232,20 @@ export function movesOf(live: Live, now: number, s: Settings): Move[] {
 
   // Small savings are noise: only what saves at least `minSaving` over an hour of work.
   // A failing loop and the budget carry no saving of their own; the loop always comes first.
-  const first = (m: Move) => (m.id === 'loop' ? 1 : 0)
+  const first = (m: Suggestion) => (m.id === 'loop' ? 1 : 0)
   return out
     .filter(m => m.id === 'loop' || m.id === 'budget' || m.score >= s.minSaving)
     .sort((a, b) => first(b) - first(a) || b.score - a.score)
 }
 
 /** The suggestion in one line, for the empty prompt and the toast. */
-export function tipOf(move: Move | undefined): string | null {
-  if (!move) return null
-  return `${move.title}${savingOf(move)}${move.key ? ` · press ${move.key}` : ''}`
+export function tipOf(suggestion: Suggestion | undefined): string | null {
+  if (!suggestion) return null
+  return `${suggestion.title}${savingOf(suggestion)}${suggestion.key ? ` · press ${suggestion.key}` : ''}`
 }
 
-/** " · saves about $1.20 per message", or nothing when the move saves nothing measurable. */
-export function savingOf(move: Move): string {
-  if (move.usd <= 0.01) return ''
-  return ` · saves about ${money(move.usd)}${move.unit === 'now' ? '' : ' ' + move.unit}`
+/** " · saves about $1.20 per message", or nothing when it saves nothing measurable. */
+export function savingOf(suggestion: Suggestion): string {
+  if (suggestion.usd <= 0.01) return ''
+  return ` · saves about ${money(suggestion.usd)}${suggestion.unit === 'now' ? '' : ' ' + suggestion.unit}`
 }

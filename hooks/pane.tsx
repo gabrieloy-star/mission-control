@@ -5,9 +5,9 @@
 // as SVG; the terminal draws the same in glyphs.
 
 import type { Category, Live, Tab, Week } from '../types'
-import { cacheLeft, cacheWarnAt, clockOf, money, seconds, span, tok } from './moves'
-import type { Move } from './moves'
-import { INK, MARK, raceOf } from './strip'
+import { cacheLeft, cacheWarnAt, clockOf, money, seconds, span, tok } from './suggestions'
+import type { Suggestion } from './suggestions'
+import { INK, MARK, limitOf } from './strip'
 import { paceOf, tasksOf, trendOf } from './signals'
 import { readUsd } from './prices'
 import { summarize } from './week'
@@ -17,7 +17,7 @@ import type { Insight } from './insights'
 export type PaneInput = {
   tab: Tab
   live: Live
-  moves: Move[]
+  suggestions: Suggestion[]
   insights: Insight[]
   categories: Category[]
   week: Week | null
@@ -38,8 +38,8 @@ export type PaneActions = {
 }
 
 const TABS: { tab: Tab; label: string; hotkey: string }[] = [
-  { tab: 'moves', label: 'Suggestions', hotkey: '1' },
-  { tab: 'tank', label: 'Context', hotkey: '2' },
+  { tab: 'suggestions', label: 'Suggestions', hotkey: '1' },
+  { tab: 'context', label: 'Context', hotkey: '2' },
   { tab: 'session', label: 'Session', hotkey: '3' },
   { tab: 'week', label: 'History', hotkey: '4' },
   { tab: 'insights', label: 'Insights', hotkey: '5' },
@@ -79,8 +79,8 @@ function glyphMeter(share: number, cells: number) {
   return '━'.repeat(n) + '╌'.repeat(Math.max(0, cells - n))
 }
 
-export function statusOf(moves: Move[]) {
-  const top = moves[0]
+export function statusOf(suggestions: Suggestion[]) {
+  const top = suggestions[0]
   if (!top || top.tone === 'calm') return { word: 'ALL GOOD', color: INK.mint, mark: MARK.calm }
   return top.tone === 'warn' ? { word: 'SUGGESTION', color: INK.amber, mark: MARK.warn } : { word: 'ACT NOW', color: INK.coral, mark: MARK.hot }
 }
@@ -137,7 +137,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   ] })
 
   // ---------- Status line ----------
-  const status = statusOf(p.moves)
+  const status = statusOf(p.suggestions)
   const elapsed = live.startedAt ? span(p.now - live.startedAt) : ''
   const model = live.model ? modelName(live.model) : ''
   const head = Box({ key: 'head', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', children: [
@@ -152,7 +152,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   const five = live.limits.find(l => l.kind === 'five_hour')
   const fiveTile: Tile = (() => {
     if (!five) return { label: '5-hour limit', value: '–' }
-    const r = raceOf(five, p.now)
+    const r = limitOf(five, p.now)
     const left = `${Math.max(0, 100 - Math.round(r.used))}% left`
     const pace = paceOf(five, live.limitSamples?.five_hour, p.now)
     if (pace?.isShort) return { label: '5-hour limit', value: `${left} · out ${clockOf(pace.runsOutAt)}`, color: pace.tone === 'hot' ? INK.coral : INK.amber }
@@ -173,8 +173,8 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   let body: unknown[] = []
 
   // ---------- Suggestions ----------
-  if (p.tab === 'moves') {
-    if (p.moves.length === 0) {
+  if (p.tab === 'suggestions') {
+    if (p.suggestions.length === 0) {
       body = [
         ...(desktop ? [Svg({ key: 'check', alt: 'All good', width: W, height: 84, source: svg(W, 84,
           `<circle cx="${W / 2}" cy="42" r="28" fill="${INK.mint}" fill-opacity="0.12" stroke="${INK.mint}" stroke-opacity="0.6" stroke-width="1.5"/>` +
@@ -183,14 +183,14 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
         Text({ key: 'why', dimColor: true, children: 'Nothing worth changing right now. A suggestion appears here when a change would save real money.' }),
       ]
     } else {
-      const now = p.moves.filter(m => m.unit === 'now').reduce((n, m) => n + m.usd, 0)
+      const now = p.suggestions.filter(m => m.unit === 'now').reduce((n, m) => n + m.usd, 0)
       body = [
         tiles('k', [
-          { label: 'Suggestions', value: String(p.moves.length), color: TONE[p.moves[0]!.tone] },
+          { label: 'Suggestions', value: String(p.suggestions.length), color: TONE[p.suggestions[0]!.tone] },
           { label: 'Save now', value: now > 0.01 ? money(now) : '–', color: now > 0.01 ? INK.mint : undefined },
           { label: 'Context', value: live.tokens === null ? '–' : tok(live.tokens) },
         ]),
-        ...p.moves.map((m, i) => Box({
+        ...p.suggestions.map((m, i) => Box({
           key: 'm' + i, flexDirection: 'column', borderStyle: 'round', borderColor: TONE[m.tone], paddingX: 1, marginTop: 1,
           children: [
             Box({ key: 'h', flexDirection: 'row', justifyContent: 'space-between', columnGap: 2, children: [
@@ -209,7 +209,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   }
 
   // ---------- Context ----------
-  if (p.tab === 'tank') {
+  if (p.tab === 'context') {
     const window = live.window || 1
     const cats = p.categories.map(c => ({ name: c.name, tokens: c.tokens }))
     const onBoard = live.tokens ?? cats.reduce((n, c) => n + c.tokens, 0)
@@ -254,14 +254,14 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
   if (p.tab === 'session') {
     const turns = p.live.turns
     const recent = turns.slice(-48)
-    const probes = p.live.weights.filter(w => w.isAgent)
-    const probeUsd = probes.reduce((n, w) => n + (w.usd ?? 0), 0)
+    const agents = p.live.weights.filter(w => w.isAgent)
+    const agentUsd = agents.reduce((n, w) => n + (w.usd ?? 0), 0)
     const cold = turns.filter(t => t.isCold)
     const total = p.live.usd ?? turns.reduce((n, t) => n + t.usd, 0)
     body = [tiles('k', [
       { label: 'Messages', value: String(turns.length) },
       { label: 'Session cost', value: money(total) },
-      { label: 'Subagents', value: probes.length ? `${Math.round((probeUsd / Math.max(0.0001, total)) * 100)}%` : '–', color: probes.length ? INK.orchid : undefined },
+      { label: 'Subagents', value: agents.length ? `${Math.round((agentUsd / Math.max(0.0001, total)) * 100)}%` : '–', color: agents.length ? INK.orchid : undefined },
     ])]
     body.push(caption('ch', 'Cost per message', recent.length ? `last ${recent.length}` : undefined))
     const top = Math.max(0.0001, ...recent.map(t => t.usd))
@@ -303,19 +303,19 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
         if (line) body.push(Text({ key: 'td' + i, dimColor: true, children: '   ' + line }))
       })
     }
-    if (probes.length) {
+    if (agents.length) {
       body.push(caption('ph', 'Subagents', 'latest 5'))
-      const maxP = Math.max(1, ...probes.map(w => w.tokens))
-      for (const w of probes.slice(-5).reverse()) {
+      const maxP = Math.max(1, ...agents.map(w => w.tokens))
+      for (const w of agents.slice(-5).reverse()) {
         body.push(barRow('p-' + w.id, `${w.agentType ?? 'subagent'} · ${w.label}`, w.tokens / maxP, tok(w.tokens), INK.orchid))
         body.push(Text({ key: 'pd-' + w.id, dimColor: true, children: `   ${[w.ms ? seconds(w.ms) : '', w.usd ? money(w.usd) : '', w.model ? modelName(w.model) : ''].filter(Boolean).join(' · ')}` }))
       }
     }
-    const cargo = p.live.weights.filter(w => !w.isAgent).sort((a, b) => b.tokens - a.tokens).slice(0, 3)
-    if (cargo.length) {
+    const outputs = p.live.weights.filter(w => !w.isAgent).sort((a, b) => b.tokens - a.tokens).slice(0, 3)
+    if (outputs.length) {
       body.push(caption('hh', 'Largest tool outputs', 'sent with every message'))
-      const maxC = Math.max(1, ...cargo.map(w => w.tokens))
-      for (const w of cargo) body.push(barRow('h-' + w.id, `${w.tool} · ${w.label}`, w.tokens / maxC, tok(w.tokens), INK.amber))
+      const maxC = Math.max(1, ...outputs.map(w => w.tokens))
+      for (const w of outputs) body.push(barRow('h-' + w.id, `${w.tool} · ${w.label}`, w.tokens / maxC, tok(w.tokens), INK.amber))
     }
   }
 
@@ -410,13 +410,13 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
 
   // ---------- Footer: cache and usage limits at a glance ----------
   const left = cacheLeft(live, p.now)
-  const fuel = live.limits.map(l => raceOf(l, p.now)).filter(r => r.left === null || r.left > 0)
+  const limitRows = live.limits.map(l => limitOf(l, p.now)).filter(r => r.left === null || r.left > 0)
   const footer = Box({ key: 'foot', flexDirection: 'row', columnGap: 3, children: [
     ...(left !== null ? [Box({ key: 'o', flexDirection: 'row', columnGap: 1, children: [
       Text({ key: 'l', dimColor: true, children: 'Cache' }),
       Text({ key: 'v', bold: true, ...(left <= 0 ? { color: INK.coral } : left <= cacheWarnAt(live) ? { color: INK.amber } : {}), children: left > 0 ? span(left) : 'expired' }),
     ] })] : []),
-    ...fuel.map(r => Box({ key: 'f' + r.label, flexDirection: 'row', columnGap: 1, children: [
+    ...limitRows.map(r => Box({ key: 'f' + r.label, flexDirection: 'row', columnGap: 1, children: [
       Text({ key: 'l', dimColor: true, children: 'Limit ' + r.label }),
       Text({ key: 'v', bold: true, ...(r.tone === 'calm' ? {} : { color: TONE[r.tone] }), children: `${Math.max(0, 100 - Math.round(r.used))}%` }),
     ] })),

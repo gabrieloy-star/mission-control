@@ -102,7 +102,7 @@ export type Live = {
   savingRun?: SavingRun | null
 }
 
-export type Tab = 'moves' | 'tank' | 'session' | 'week' | 'insights'
+export type Tab = 'suggestions' | 'context' | 'session' | 'week' | 'insights'
 
 /** Tokens by kind, as the week scanner sums them. */
 export type Tokens = { input: number; output: number; read: number; write5m: number; write1h: number }

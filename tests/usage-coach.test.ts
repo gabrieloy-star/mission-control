@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Live } from '../types'
-import { HOUR, MINUTE, cacheLeft, movesOf, tipOf } from '../hooks/moves'
+import { HOUR, MINUTE, cacheLeft, suggestionsOf, tipOf } from '../hooks/suggestions'
 import { compactUsd, priceOf, rewriteUsd } from '../hooks/prices'
 import { drawStrip, familyWeek, statusCard } from '../hooks/strip'
 import { drawPane } from '../hooks/pane'
@@ -31,7 +31,7 @@ test('prices follow the current list', () => {
 })
 
 test('a warm, quiet session has nothing to fix', () => {
-  expect(movesOf(live({ tokens: 60_000, conversation: 20_000 }), NOW, SETTINGS)).toEqual([])
+  expect(suggestionsOf(live({ tokens: 60_000, conversation: 20_000 }), NOW, SETTINGS)).toEqual([])
 })
 
 test('the cache countdown follows the cache Claude wrote: 1 hour or 5 minutes', () => {
@@ -42,37 +42,37 @@ test('the cache countdown follows the cache Claude wrote: 1 hour or 5 minutes', 
 test('small savings are not suggested', () => {
   // A 12k tool output on Opus 5.5 saves cents: hidden at the $1 default, listed when the floor is 0.
   const l = live({ weights: [{ id: 'r', tool: 'Read', label: 'big file', tokens: 12_000, isAgent: false }] })
-  expect(movesOf(l, NOW, SETTINGS).some(m => m.id === 'output')).toBe(false)
-  expect(movesOf(l, NOW, ALL).some(m => m.id === 'output')).toBe(true)
+  expect(suggestionsOf(l, NOW, SETTINGS).some(m => m.id === 'output')).toBe(false)
+  expect(suggestionsOf(l, NOW, ALL).some(m => m.id === 'output')).toBe(true)
 })
 
 test('a cache about to expire offers to compact, with the saving', () => {
-  const moves = movesOf(live({ tokens: 296_000, conversation: 250_000, cacheAt: NOW - 50 * MINUTE }), NOW, SETTINGS)
-  const brk = moves.find(m => m.id === 'break')!
+  const suggestions = suggestionsOf(live({ tokens: 296_000, conversation: 250_000, cacheAt: NOW - 50 * MINUTE }), NOW, SETTINGS)
+  const brk = suggestions.find(m => m.id === 'break')!
   expect(brk.key).toBe('c')
   expect(brk.usd).toBeGreaterThan(1.5)
   // 140k of conversation saves under $1 on Opus 5.5: not worth a suggestion.
-  expect(movesOf(live({ cacheAt: NOW - 50 * MINUTE }), NOW, SETTINGS)).toEqual([])
+  expect(suggestionsOf(live({ cacheAt: NOW - 50 * MINUTE }), NOW, SETTINGS)).toEqual([])
   expect(tipOf(brk)).toContain('press c')
 })
 
 test('a cold, huge context suggests a fresh thread, not a resend', () => {
-  const moves = movesOf(live({ tokens: 320_000, conversation: 274_000, cacheAt: NOW - 2 * HOUR }), NOW, SETTINGS)
-  expect(moves[0]!.id).toBe('fresh')
-  expect(moves[0]!.tone).toBe('hot')
+  const suggestions = suggestionsOf(live({ tokens: 320_000, conversation: 274_000, cacheAt: NOW - 2 * HOUR }), NOW, SETTINGS)
+  expect(suggestions[0]!.id).toBe('fresh')
+  expect(suggestions[0]!.tone).toBe('hot')
 })
 
 test('idle MCP servers are named once a few messages went by', () => {
   const turn = { at: NOW, ms: 1000, added: 0, usd: 0.1, cached: 1, agentShare: 0, isCold: false }
   const l = live({ mcp: [{ server: 'linear', tokens: 9_000 }, { server: 'github', tokens: 6_000 }], mcpUsed: ['github'], turns: [turn, turn, turn] })
-  const mcp = movesOf(l, NOW, ALL).find(m => m.id === 'mcp')!
+  const mcp = suggestionsOf(l, NOW, ALL).find(m => m.id === 'mcp')!
   expect(mcp.title).toBe('Turn off 1 unused MCP server')
   expect(mcp.how).toContain('linear')
 })
 
 test('a heavy general-purpose subagent points to Explore', () => {
   const l = live({ weights: [{ id: 'a', tool: 'Agent', label: 'find callers', tokens: 17_500_000, isAgent: true, usd: 3.5, agentType: 'general-purpose' }] })
-  expect(movesOf(l, NOW, SETTINGS).some(m => m.id === 'explore')).toBe(true)
+  expect(suggestionsOf(l, NOW, SETTINGS).some(m => m.id === 'explore')).toBe(true)
 })
 
 // A stand-in element table: each element is its props, so the strip's choices can be read back.
@@ -99,7 +99,7 @@ function refusedBoxProps(node: any, found: string[] = []): string[] {
 
 function partsAt(columns: number, desktop: boolean) {
   const l = live({ limits: [{ kind: 'five_hour', percentUsed: 61 }, { kind: 'seven_day', percentUsed: 41 }], cacheAt: NOW - 52 * MINUTE })
-  const tree: any = drawStrip(el, { live: l, week: null, move: movesOf(l, NOW, SETTINGS)[0], insights: 2, now: NOW, columns, desktop, onMove() {}, onOpen() {}, onInsights() {} })
+  const tree: any = drawStrip(el, { live: l, week: null, suggestion: suggestionsOf(l, NOW, SETTINGS)[0], insights: 2, now: NOW, columns, desktop, onSuggestion() {}, onOpen() {}, onInsights() {} })
   return (tree.children as any[]).map(c => c.key as string)
 }
 
@@ -113,7 +113,7 @@ test('the details card shows both usage limits with reset times and the week of 
     { kind: 'five_hour', percentUsed: 61, resetsAt: new Date(NOW + 2 * HOUR).toISOString() },
     { kind: 'seven_day', percentUsed: 41, resetsAt: new Date(NOW + 50 * HOUR).toISOString() },
   ] })
-  const card = statusCard({ live: l, week, move: undefined, insights: 0, now: NOW, columns: 160, desktop: true, onMove() {}, onOpen() {}, onInsights() {} })
+  const card = statusCard({ live: l, week, suggestion: undefined, insights: 0, now: NOW, columns: 160, desktop: true, onSuggestion() {}, onOpen() {}, onInsights() {} })
   const text = card.rows.map(r => `${r.label} ${r.value ?? ''}`).join('\n')
   expect(text).toContain('5-hour limit 39% left · resets in 2h00')
   expect(text).toContain('Weekly limit 59% left · resets in 2d2h')
@@ -124,12 +124,12 @@ test('the details card shows both usage limits with reset times and the week of 
 test('the strip keeps the most important parts that fit, on one line', () => {
   for (const desktop of [false, true]) {
     const wide = partsAt(160, desktop)
-    expect(wide).toEqual(['tank', 'fuse', 'race-five_hour', 'race-seven_day', 'spend', 'move', 'insights', 'open'])
+    expect(wide).toEqual(['context', 'idleTimer', 'limit-five_hour', 'limit-seven_day', 'spend', 'suggestion', 'insights', 'open'])
     const narrow = partsAt(60, desktop)
-    expect(narrow[0]).toBe('tank')
-    expect(narrow).toContain('move')
+    expect(narrow[0]).toBe('context')
+    expect(narrow).toContain('suggestion')
     expect(narrow).toContain('open')
-    expect(narrow).not.toContain('race-seven_day')
+    expect(narrow).not.toContain('limit-seven_day')
   }
 })
 
@@ -155,8 +155,8 @@ test('every pane tab draws on both surfaces without throwing', () => {
   const wk = { at: NOW, since: '7d', sessions: 10, requests: 100, main: { 'claude-opus-5-5': t(3e8) }, sub: { 'claude-opus-5-5': t(9e8) },
     agentTypes: { 'general-purpose': { runs: 30, tokens: 9e8 } }, cold: { count: 12, byModel: { 'claude-opus-5-5': 2_400_000 } }, projects: [{ name: 'shop', tokens: 1e9 }] }
   for (const desktop of [false, true]) {
-    for (const tab of ['moves', 'tank', 'session', 'week', 'insights'] as const) {
-      const tree: any = drawPane(el, { tab, live: l, moves: movesOf(l, NOW, SETTINGS), insights: insightsOf(l, wk, NOW), categories: [{ name: 'Messages', tokens: 140_000 }, { name: 'System prompt', tokens: 12_000 }],
+    for (const tab of ['suggestions', 'context', 'session', 'week', 'insights'] as const) {
+      const tree: any = drawPane(el, { tab, live: l, suggestions: suggestionsOf(l, NOW, SETTINGS), insights: insightsOf(l, wk, NOW), categories: [{ name: 'Messages', tokens: 140_000 }, { name: 'System prompt', tokens: 12_000 }],
         week: wk, weekBusy: false, columns: 56, now: NOW, desktop }, { setTab() {}, compact() {}, readWeek() {} })
       expect(tree.type).toBe('Box')
       expect(JSON.stringify(tree)).not.toContain('"plain":false')
@@ -183,7 +183,7 @@ test('hard work on a top model raises no model insight', () => {
 
 test('a queued compaction shows on the strip until it runs', () => {
   const l = live({ tokens: 296_000, conversation: 250_000, cacheAt: NOW - 50 * MINUTE })
-  const tree: any = drawStrip(el, { live: l, week: null, move: movesOf(l, NOW, SETTINGS)[0], insights: 0, now: NOW, columns: 160, desktop: false, isQueued: true, onMove() {}, onOpen() {}, onInsights() {} })
+  const tree: any = drawStrip(el, { live: l, week: null, suggestion: suggestionsOf(l, NOW, SETTINGS)[0], insights: 0, now: NOW, columns: 160, desktop: false, isQueued: true, onSuggestion() {}, onOpen() {}, onInsights() {} })
   expect(JSON.stringify(tree)).toContain('compaction queued')
   expect(JSON.stringify(tree)).toContain('"label":"details"')
 })
@@ -215,7 +215,7 @@ test('the forecast reaches insights, the tooltip and the details card', () => {
   const pace = insightsOf(l, null, NOW).find(i => i.id === 'limit-five_hour')!
   expect(pace.kind).toBe('now')
   expect(pace.title).toContain('5-hour limit runs out at')
-  const input = { live: l, week: null, move: undefined, insights: 1, now: NOW, columns: 200, desktop: true, onMove() {}, onOpen() {}, onInsights() {} }
+  const input = { live: l, week: null, suggestion: undefined, insights: 1, now: NOW, columns: 200, desktop: true, onSuggestion() {}, onOpen() {}, onInsights() {} }
   expect(JSON.stringify(drawStrip(el, input))).toContain('At this pace it runs out at')
   expect(statusCard(input).rows.some(r => r.label.includes('at this pace it runs out at'))).toBe(true)
 })
@@ -231,9 +231,9 @@ test('three failures in a row on the same step raise the flag', () => {
   expect(loopStep(loop, step, false, 6)).toBe(null)
   expect(loopStep(loop, stepOf('Edit', { file_path: '/a/b/c.ts' }), true, 6)!.count).toBe(1)
   const l = live({ usd: 7.4, loop: { ...loop!, isTold: true } })
-  const moves = movesOf(l, NOW, SETTINGS)
-  expect(moves[0]!.id).toBe('loop')
-  expect(moves[0]!.title).toBe('Claude failed the same step 3 times ($2.40)')
+  const suggestions = suggestionsOf(l, NOW, SETTINGS)
+  expect(suggestions[0]!.id).toBe('loop')
+  expect(suggestions[0]!.title).toBe('Claude failed the same step 3 times ($2.40)')
   expect(insightsOf(l, null, NOW).some(i => i.id === 'loop')).toBe(true)
 })
 
@@ -283,7 +283,7 @@ test('the week against the one before names the project behind the change', () =
 
 test('every tooltip says what it is and what to do', () => {
   const l = live({ limits: [five(61)], cacheAt: NOW - 52 * MINUTE })
-  const tree = JSON.stringify(drawStrip(el, { live: l, week: null, move: movesOf(l, NOW, SETTINGS)[0], insights: 2, now: NOW, columns: 200, desktop: true, onMove() {}, onOpen() {}, onInsights() {} }))
+  const tree = JSON.stringify(drawStrip(el, { live: l, week: null, suggestion: suggestionsOf(l, NOW, SETTINGS)[0], insights: 2, now: NOW, columns: 200, desktop: true, onSuggestion() {}, onOpen() {}, onInsights() {} }))
   for (const name of ['Context ·', 'Prompt cache ·', '5-hour usage limit ·', 'Session cost ·', 'Insights ·']) expect(tree).toContain(name)
   expect((tree.match(/To do: /g) ?? []).length).toBeGreaterThanOrEqual(5)
   expect(tree).toContain('WATCH')
@@ -291,7 +291,7 @@ test('every tooltip says what it is and what to do', () => {
 
 test('the welcome shows above the strip until got it', () => {
   const l = live()
-  const base = { live: l, week: null, move: undefined, insights: 0, now: NOW, columns: 160, desktop: false, onMove() {}, onOpen() {}, onInsights() {} }
+  const base = { live: l, week: null, suggestion: undefined, insights: 0, now: NOW, columns: 160, desktop: false, onSuggestion() {}, onOpen() {}, onInsights() {} }
   const shown: any = drawStrip(el, { ...base, isWelcome: true })
   expect(shown.children[0].key).toBe('welcome')
   expect(JSON.stringify(shown)).toContain('"label":"got it"')
@@ -307,8 +307,8 @@ test('the pane draws Today, tasks and the weekly change on both surfaces', () =>
   })
   const w = weekOf({ main: { 'claude-opus-5-5': tk(10e6) }, prev: { main: { 'claude-opus-5-5': tk(6.25e6) }, sub: {} }, today: { 'claude-opus-5-5': tk(1e6) }, sessionUsdAtScan: 9 })
   for (const desktop of [false, true]) {
-    for (const tab of ['moves', 'session', 'week', 'insights'] as const) {
-      const tree: any = drawPane(el, { tab, live: l, moves: movesOf(l, NOW, SETTINGS), insights: insightsOf(l, w, NOW), categories: [], week: w, weekBusy: false,
+    for (const tab of ['suggestions', 'session', 'week', 'insights'] as const) {
+      const tree: any = drawPane(el, { tab, live: l, suggestions: suggestionsOf(l, NOW, SETTINGS), insights: insightsOf(l, w, NOW), categories: [], week: w, weekBusy: false,
         columns: 56, now: NOW, desktop, saved: { usd: 4.2, count: 2 }, today: todayUsd(w, l.usd) }, { setTab() {}, compact() {}, readWeek() {} })
       const text = JSON.stringify(tree)
       expect(refusedBoxProps(tree)).toEqual([])

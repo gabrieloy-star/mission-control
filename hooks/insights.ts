@@ -3,7 +3,7 @@
 
 import type { Live, Turn, Week } from '../types'
 import { familyWeek } from './strip'
-import { clockOf, money, span, tok } from './moves'
+import { clockOf, money, span, tok } from './suggestions'
 import { LOOP_AT, limitName, paceOf, trendOf } from './signals'
 import { priceOf, rewriteUsd, sumTokens, tokensUsd } from './prices'
 

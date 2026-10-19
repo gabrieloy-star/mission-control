@@ -10,15 +10,15 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Category, Live, Saving, SavingRun, Tab, Tokens, Turn, Week, Weight } from '../types'
-import { CACHE_TTL, HOUR, LOOP_AT, MINUTE, cacheEnd, clockOf, conversationOf, money, movesOf, seconds, span, tipOf, tok, ttlOf } from './moves'
-import type { Settings } from './moves'
+import { CACHE_TTL, HOUR, LOOP_AT, MINUTE, cacheEnd, clockOf, conversationOf, money, suggestionsOf, seconds, span, tipOf, tok, ttlOf } from './suggestions'
+import type { Settings } from './suggestions'
 import { compactUsd, readUsd, rewriteUsd, sumTokens, tokensUsd } from './prices'
 import { SAVINGS_KEY, limitName, loopStep, paceOf, promptLine, recordSaving, sampleLimit, savedThisWeek, stepOf, todayUsd } from './signals'
 import { drawStrip } from './strip'
 import { drawPane } from './pane'
-import { defuse, light, newFuse } from './idle'
+import { stopIdle, startIdle, newIdleTimer } from './idle'
 import { insightsOf } from './insights'
-import type { FuseOptions } from './idle'
+import type { IdleOptions } from './idle'
 
 const PLUGIN = 'usage-coach'
 const PANE = 'usage-coach'
@@ -37,7 +37,7 @@ const EMPTY: Live = {
 }
 
 const live = atom({ plugin: 'usage-coach', key: 'live' } as const, EMPTY as Live)
-const tab = atom({ plugin: 'usage-coach', key: 'tab' } as const, 'moves' as Tab)
+const tab = atom({ plugin: 'usage-coach', key: 'tab' } as const, 'suggestions' as Tab)
 const week = atom({ plugin: 'usage-coach', key: 'week' } as const, null as Week | null)
 const weekBusy = atom({ plugin: 'usage-coach', key: 'weekBusy' } as const, false)
 const categories = atom({ plugin: 'usage-coach', key: 'categories' } as const, [] as Category[])
@@ -65,7 +65,7 @@ let isCompactQueued = false
 let isOwnCompact = false
 let firstStep = true
 let ticker: { cancel(): void } | null = null
-const fuse = newFuse()
+const idleTimer = newIdleTimer()
 
 // ---------- Settings ----------
 
@@ -116,7 +116,7 @@ async function readUsage($: EngineInterface): Promise<void> {
   }))
 }
 
-/** The conversation's size for the idle fuse, fresh. */
+/** The conversation's size for the idle idleTimer, fresh. */
 async function conversationNow($: EngineInterface): Promise<number | null> {
   await readBreakdown($).catch(() => {})
   const l = await read($, live)
@@ -280,7 +280,7 @@ function weightOf(id: string, tool: string, input: any, result: any): Weight | n
 
 let settings = settingsOf(undefined)
 
-function fuseFor($: EngineInterface): FuseOptions {
+function idleOptions($: EngineInterface): IdleOptions {
   return {
     leadMs: settings.leadMs,
     minTokens: settings.minTokens,
@@ -311,7 +311,7 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     await $.command.register({ name: 'usage-coach', description: 'Usage Coach: where your tokens go, and the change that saves the most' })
     ticker?.cancel()
-    // The fuse and the race move with the clock.
+    // The idle countdown and the usage limits change with the clock.
     ticker = $.clock.every(30_000, () => $.ui.invalidate('ui.render'))
     try {
       await readUsage($)
@@ -342,7 +342,7 @@ export const register: Register = (on, options) => {
 
   on('turn.start', async ($, e, next) => {
     if (!e.agentId) {
-      defuse($, fuse)
+      stopIdle($, idleTimer)
       isTurnRunning = true
       const l = await read($, live)
       turnStartTokens = l.tokens
@@ -475,7 +475,7 @@ export const register: Register = (on, options) => {
         await update($, live, x => ({ ...x, toldPace: [...(x.toldPace ?? []), key].slice(-6) }))
         $.ui.toast(`Usage Coach: at this pace the ${limitName(lim.kind)} runs out at ${clockOf(pace.runsOutAt)}, ${span(pace.resetsAt! - pace.runsOutAt)} before it resets`)
       }
-      const top = movesOf(after, now, s)[0]
+      const top = suggestionsOf(after, now, s)[0]
       if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Usage Coach: ${tipOf(top)}`)
       // A model that does not fit the work is said once per session; the rest waits in Insights.
       const fit = insightsOf(after, await read($, week), now).find(i => i.kind === 'model' && i.tone !== 'calm' && !toldInsights.has(i.id))
@@ -486,7 +486,7 @@ export const register: Register = (on, options) => {
     } catch {
       // No reading this turn: the strip keeps the last one.
     }
-    await light($, fuse, fuseFor($)).catch(() => {})
+    await startIdle($, idleTimer, idleOptions($)).catch(() => {})
     $.ui.invalidate('ui.render')
     return result
   })
@@ -532,7 +532,7 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     const result = await next(e)
-    defuse($, fuse)
+    stopIdle($, idleTimer)
     if (e.reason === 'clear') {
       await update($, live, x => ({ ...EMPTY, limits: x.limits, mcp: x.mcp, limitSamples: x.limitSamples, toldPace: x.toldPace }))
       turnStartTokens = null
@@ -551,12 +551,12 @@ export const register: Register = (on, options) => {
     const strip = drawStrip(el, {
       live: l,
       week: await read($, week),
-      move: movesOf(l, now, s)[0],
+      suggestion: suggestionsOf(l, now, s)[0],
       insights: insightsOf(l, await read($, week), now).length,
       now,
       columns: Math.max(20, e.props.bodyColumns),
       desktop: e.surface === 'desktop',
-      onMove: () => void compactFromStrip($),
+      onSuggestion: () => void compactFromStrip($),
       isQueued: isCompactQueued,
       onOpen: () => void togglePane($),
       onInsights: () => void openInsights($),
@@ -577,7 +577,7 @@ export const register: Register = (on, options) => {
     return drawPane($.ui.resolve(e), {
       tab: await read($, tab),
       live: l,
-      moves: movesOf(l, now, s),
+      suggestions: suggestionsOf(l, now, s),
       insights: insightsOf(l, await read($, week), now),
       categories: await read($, categories),
       week: await read($, week),
@@ -591,7 +591,7 @@ export const register: Register = (on, options) => {
       setTab: t => {
         void update($, tab, () => t)
         if (t === 'week') void readWeek($)
-        if (t === 'tank') void readBreakdown($).catch(() => {})
+        if (t === 'context') void readBreakdown($).catch(() => {})
       },
       compact: () => void compactFromStrip($),
       readWeek: () => void readWeek($, true),
@@ -614,7 +614,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.props.isDraft || e.props.isWorking) return next(e)
     const l = await read($, live)
-    const tip = tipOf(movesOf(l, await $.clock.now(), s)[0])
+    const tip = tipOf(suggestionsOf(l, await $.clock.now(), s)[0])
     return tip ? next({ ...e, props: { ...e.props, hint: tip } }) : next(e)
   })
 }

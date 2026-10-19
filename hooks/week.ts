@@ -2,7 +2,7 @@
 
 import type { Tokens, Week } from '../types'
 import { rewriteUsd, sumTokens, tokensUsd } from './prices'
-import { money, tok } from './moves'
+import { money, tok } from './suggestions'
 
 export type WeekSummary = {
   tokens: number
