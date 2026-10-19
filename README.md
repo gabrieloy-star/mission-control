@@ -115,7 +115,7 @@ Both compactions go through Claude Code itself, on your own account, like typing
 
 **What it adds**
 
-- The `/usage-coach` command, answered locally (it opens the pane and costs no tokens).
+- The `/usage-coach` command, answered locally (it opens the pane and costs no tokens). Its `command.run` hook matches only `/usage-coach`; every other command passes through untouched.
 
 ## Install
 
