@@ -5,10 +5,10 @@
 // terminal draws them with glyphs.
 
 import type { Limit, Live, Week } from '../types'
-import { HEAVY_AT, HOUR, cacheEnd, cacheLeft, cacheWarnAt, clockOf, money, savingOf, span, tok, ttlOf } from './suggestions'
+import { HEAVY_AT, HOUR, cacheEnd, cacheLeft, cacheWarnAt, clockOf, money, savingOf, span, tok, ttlOf, whenOf } from './suggestions'
 import type { Suggestion } from './suggestions'
 import { sumTokens, tokensUsd } from './prices'
-import { paceOf, tasksOf } from './signals'
+import { paceOf, paceWords, tasksOf } from './signals'
 
 export const INK = {
   cobalt: '#5b8def',
@@ -170,7 +170,8 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
           what: [
             'Everything Claude sends with every message',
             live.fixed !== null ? `Grey: ${tok(live.fixed)} of instructions, tools and memory` : '',
-            'Blue: your conversation · bright: what the last message added · red line: 85%',
+            'Blue: your conversation · red line: 85%',
+            addText ? `${addText}: what your last message added (its reply, tool outputs and files read)` : '',
           ],
           todo: tone === 'hot' ? 'compact (click compact), or start a new session for the next task'
             : tone === 'warn' ? 'type /clear before an unrelated task'
@@ -243,7 +244,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
       tip: tipText({
         name: `${limit.kind === 'five_hour' ? '5-hour' : limit.kind === 'seven_day' ? 'Weekly' : r.label} usage limit`, now: `${value} left`, tone,
         what: [
-          pace?.isShort ? `At this pace it runs out at ${clockOf(pace.runsOutAt)}, ${span(pace.resetsAt! - pace.runsOutAt)} before it resets` : '',
+          pace?.isShort ? `Runs out ${whenOf(pace.runsOutAt, now)} ${paceWords(pace)}: ${span(pace.resetsAt! - pace.runsOutAt)} before it resets` : '',
           r.clock !== null ? `Bar: usage left · ring: ${Math.max(0, 100 - Math.round(r.clock))}% of the time left` : '',
           'A bar behind the ring means you use it faster than time passes',
           r.left !== null ? `Resets in ${span(r.left)}` : '',
@@ -399,7 +400,7 @@ export function statusCard(s: StripInput): Card {
     const pace = paceOf(limit, live.limitSamples?.[limit.kind], now)
     const tone = pace?.isShort ? (pace.tone === 'hot' ? 'hot' : 'warn') : r.tone
     rows.push({ label: names[limit.kind] ?? limit.kind, value: `${left}% left${resets}`, color: tone === 'calm' ? undefined : TONE[tone] })
-    if (pace?.isShort) rows.push({ label: `   at this pace it runs out at ${clockOf(pace.runsOutAt)}` })
+    if (pace?.isShort) rows.push({ label: '   runs out', value: `${whenOf(pace.runsOutAt, now)} · ${span(pace.resetsAt! - pace.runsOutAt)} early`, color: TONE[tone] })
   }
   if (!live.limits.length) rows.push({ label: 'Usage limits: Claude reports them after the next message' })
   if (s.week) {

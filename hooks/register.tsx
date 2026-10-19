@@ -10,10 +10,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Category, Live, Saving, SavingRun, Tab, Tokens, Turn, Week, Weight } from '../types'
-import { CACHE_TTL, HOUR, LOOP_AT, MINUTE, cacheEnd, clockOf, conversationOf, money, suggestionsOf, seconds, span, tipOf, tok, ttlOf } from './suggestions'
+import { CACHE_TTL, HOUR, LOOP_AT, MINUTE, cacheEnd, clockOf, conversationOf, money, suggestionsOf, seconds, span, tipOf, tok, ttlOf, whenOf } from './suggestions'
 import type { Settings } from './suggestions'
 import { compactUsd, readUsd, rewriteUsd, sumTokens, tokensUsd } from './prices'
-import { SAVINGS_KEY, limitName, loopStep, paceOf, promptLine, recordSaving, sampleLimit, savedThisWeek, stepOf, todayUsd } from './signals'
+import { SAVINGS_KEY, limitName, loopStep, paceOf, paceWords, promptLine, recordSaving, sampleLimit, savedThisWeek, stepOf, todayUsd } from './signals'
 import { drawStrip } from './strip'
 import { drawPane } from './pane'
 import { stopIdle, startIdle, newIdleTimer } from './idle'
@@ -483,7 +483,7 @@ export const register: Register = (on, options) => {
         const key = `${lim.kind}@${lim.resetsAt ?? ''}`
         if (!pace?.isShort || after.toldPace?.includes(key)) continue
         await update($, live, x => ({ ...x, toldPace: [...(x.toldPace ?? []), key].slice(-6) }))
-        $.ui.toast(`Usage Coach: at this pace the ${limitName(lim.kind)} runs out at ${clockOf(pace.runsOutAt)}, ${span(pace.resetsAt! - pace.runsOutAt)} before it resets`)
+        $.ui.toast(`Usage Coach: ${paceWords(pace)} the ${limitName(lim.kind)} runs out ${whenOf(pace.runsOutAt, now)}, ${span(pace.resetsAt! - pace.runsOutAt)} before it resets`)
       }
       const top = suggestionsOf(after, now, s)[0]
       if (top && top.tone === 'hot' && top.id !== 'budget') await toastOnce($, `Usage Coach: ${tipOf(top)}`)

@@ -74,6 +74,15 @@ export function seconds(ms: number): string {
   return s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + String(s % 60).padStart(2, '0') + 's'
 }
 
+/** "today 08:40", "tomorrow 08:40", or "Thu 08:40" within the week. */
+export function whenOf(ts: number, now: number): string {
+  const day = (t: number) => new Date(t).setHours(0, 0, 0, 0)
+  const days = Math.round((day(ts) - day(now)) / (24 * HOUR))
+  if (days === 0) return 'today ' + clockOf(ts)
+  if (days === 1) return 'tomorrow ' + clockOf(ts)
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(ts).getDay()] + ' ' + clockOf(ts)
+}
+
 export function clockOf(ts: number): string {
   const d = new Date(ts)
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')

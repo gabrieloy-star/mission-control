@@ -3,8 +3,8 @@
 
 import type { Live, Turn, Week } from '../types'
 import { familyWeek } from './strip'
-import { clockOf, money, span, tok } from './suggestions'
-import { LOOP_AT, limitName, paceOf, trendOf } from './signals'
+import { money, span, tok, whenOf } from './suggestions'
+import { LOOP_AT, limitName, paceOf, paceWords, trendOf } from './signals'
 import { priceOf, rewriteUsd, sumTokens, tokensUsd } from './prices'
 
 export type Insight = {
@@ -66,8 +66,9 @@ export function insightsOf(live: Live, week: Week | null, now: number): Insight[
     const name = limitName(limit.kind)
     out.push({
       id: 'limit-' + limit.kind, kind: 'now', tone: pace.tone,
-      title: `At this pace the ${name} runs out at ${clockOf(pace.runsOutAt)}`,
-      how: `That is ${span(pace.resetsAt! - pace.runsOutAt)} before it resets at ${clockOf(pace.resetsAt!)}: you are using about ${Math.round(pace.perHour)}% an hour. ` +
+      title: `The ${name} runs out ${whenOf(pace.runsOutAt, now)}`,
+      how: `That is ${paceWords(pace)}, ${span(pace.resetsAt! - pace.runsOutAt)} before it resets ${whenOf(pace.resetsAt!, now)}` +
+        (pace.basis === 'week' ? ` (about ${Math.round(pace.perHour * 24)}% a day). ` : ` (about ${Math.round(pace.perHour)}% an hour). `) +
         'To make it last, run routine work on a lighter model (/model sonnet) and keep subagents for searches that need them.',
     })
   }

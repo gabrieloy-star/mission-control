@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Live } from '../types'
-import { HOUR, MINUTE, cacheLeft, suggestionsOf, tipOf } from '../hooks/suggestions'
+import { HOUR, MINUTE, cacheLeft, suggestionsOf, tipOf, whenOf } from '../hooks/suggestions'
 import { compactUsd, priceOf, rewriteUsd } from '../hooks/prices'
 import { drawStrip, familyWeek, statusCard } from '../hooks/strip'
 import { drawPane } from '../hooks/pane'
@@ -214,10 +214,10 @@ test('the forecast reaches insights, the tooltip and the details card', () => {
   const l = live({ limits: [five(60)], limitSamples: { five_hour: samples } })
   const pace = insightsOf(l, null, NOW).find(i => i.id === 'limit-five_hour')!
   expect(pace.kind).toBe('now')
-  expect(pace.title).toContain('5-hour limit runs out at')
+  expect(pace.title).toContain('5-hour limit runs out today')
   const input = { live: l, week: null, suggestion: undefined, insights: 1, now: NOW, columns: 200, desktop: true, onSuggestion() {}, onOpen() {}, onInsights() {} }
-  expect(JSON.stringify(drawStrip(el, input))).toContain('At this pace it runs out at')
-  expect(statusCard(input).rows.some(r => r.label.includes('at this pace it runs out at'))).toBe(true)
+  expect(JSON.stringify(drawStrip(el, input))).toContain("Runs out today")
+  expect(statusCard(input).rows.find(r => r.label.includes('runs out'))!.value).toContain('today')
 })
 
 test('three failures in a row on the same step raise the flag', () => {
@@ -338,4 +338,19 @@ test('the cache tooltip says when idle compact will run', () => {
   const base = { live: l, week: null, move: undefined, insights: 0, now: NOW, columns: 200, desktop: true, onSuggestion() {}, onOpen() {}, onInsights() {} } as any
   expect(JSON.stringify(drawStrip(el, { ...base, idleAt: NOW + 45 * MINUTE }))).toContain('Usage Coach compacts at')
   expect(JSON.stringify(drawStrip(el, { ...base, idleAt: null }))).toContain('Idle compact: off for this session')
+})
+
+test('the weekly limit forecasts from the average since the week began, with the day', () => {
+  // 47% used, 3 days in: about 15.7% a day, so the last 53% lasts about 3.4 days, before the reset in 4.
+  const week = { kind: 'seven_day', percentUsed: 47, resetsAt: new Date(NOW + 4 * 24 * HOUR).toISOString() }
+  const pace = paceOf(week, undefined, NOW)!
+  expect(pace.basis).toBe('week')
+  expect(pace.isShort).toBe(true)
+  expect(pace.tone).toBe('warn')
+  expect(Math.round((pace.runsOutAt - NOW) / HOUR)).toBe(81)
+  // Too early in the window to say.
+  expect(paceOf({ ...week, resetsAt: new Date(NOW + 7 * 24 * HOUR - 2 * HOUR).toISOString() }, undefined, NOW)).toBe(null)
+  expect(whenOf(NOW + 10 * MINUTE, NOW)).toMatch(/^today \d\d:\d\d$/)
+  expect(whenOf(NOW + 24 * HOUR, NOW)).toMatch(/^tomorrow /)
+  expect(whenOf(NOW + 3 * 24 * HOUR, NOW)).toMatch(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) /)
 })

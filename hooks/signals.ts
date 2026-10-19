@@ -34,22 +34,44 @@ export type Pace = {
   tone: 'calm' | 'warn' | 'hot'
   /** Percentage points used per hour at this pace. */
   perHour: number
+  /** `hour`: the last hour's pace (5-hour limit); `week`: the average since the weekly window began. */
+  basis: 'hour' | 'week'
 }
 
+const WEEK_SPAN = 7 * 24 * HOUR
+/** The weekly average means little before this much of the window has gone by. */
+const WEEK_MIN_ELAPSED = 6 * HOUR
+
 export function paceOf(limit: Limit, samples: LimitSample[] | undefined, now: number): Pace | null {
+  const used = Math.min(100, Math.max(0, limit.percentUsed))
+  const reset = Date.parse(limit.resetsAt ?? '')
+  const resetsAt = Number.isNaN(reset) ? null : reset
+  // The weekly limit: nights and days off count, so the pace is the average since the window began.
+  if (limit.kind === 'seven_day') {
+    if (resetsAt === null || used <= 0) return null
+    const elapsed = WEEK_SPAN - (resetsAt - now)
+    if (elapsed < WEEK_MIN_ELAPSED) return null
+    const slope = used / elapsed
+    const runsOutAt = now + (100 - used) / slope
+    const isShort = runsOutAt < resetsAt
+    const tone = !isShort ? 'calm' : resetsAt - runsOutAt >= 24 * HOUR ? 'hot' : 'warn'
+    return { runsOutAt, resetsAt, isShort, tone, perHour: slope * HOUR, basis: 'week' }
+  }
   const recent = (samples ?? []).filter(s => now - s.at <= PACE_WINDOW)
   if (recent.length < PACE_SAMPLES) return null
   const first = recent[0]!, last = recent[recent.length - 1]!
   if (last.at - first.at < PACE_SPAN) return null
   const slope = (last.pct - first.pct) / (last.at - first.at)
   if (slope <= 0) return null
-  const used = Math.min(100, Math.max(0, limit.percentUsed))
   const runsOutAt = now + (100 - used) / slope
-  const reset = Date.parse(limit.resetsAt ?? '')
-  const resetsAt = Number.isNaN(reset) ? null : reset
   const isShort = resetsAt !== null && runsOutAt < resetsAt
   const tone = !isShort ? 'calm' : resetsAt! - runsOutAt >= 30 * MINUTE ? 'hot' : 'warn'
-  return { runsOutAt, resetsAt, isShort, tone, perHour: slope * HOUR }
+  return { runsOutAt, resetsAt, isShort, tone, perHour: slope * HOUR, basis: 'hour' }
+}
+
+/** How the pace was read, in words. */
+export function paceWords(p: Pace): string {
+  return p.basis === 'week' ? 'at your average pace this week' : "at this hour's pace"
 }
 
 /** "5-hour limit", "weekly limit". */

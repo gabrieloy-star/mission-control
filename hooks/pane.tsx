@@ -5,7 +5,7 @@
 // as SVG; the terminal draws the same in glyphs.
 
 import type { Category, Live, Tab, Week } from '../types'
-import { cacheLeft, cacheWarnAt, clockOf, money, seconds, span, tok } from './suggestions'
+import { cacheLeft, cacheWarnAt, clockOf, money, seconds, span, tok, whenOf } from './suggestions'
 import type { Suggestion } from './suggestions'
 import { INK, MARK, limitOf } from './strip'
 import { paceOf, tasksOf, trendOf } from './signals'
@@ -160,7 +160,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
     const r = limitOf(five, p.now)
     const left = `${Math.max(0, 100 - Math.round(r.used))}% left`
     const pace = paceOf(five, live.limitSamples?.five_hour, p.now)
-    if (pace?.isShort) return { label: '5-hour limit', value: `${left} · out ${clockOf(pace.runsOutAt)}`, color: pace.tone === 'hot' ? INK.coral : INK.amber }
+    if (pace?.isShort) return { label: '5-hour limit', value: `${left} · out ${whenOf(pace.runsOutAt, p.now)}`, color: pace.tone === 'hot' ? INK.coral : INK.amber }
     return { label: '5-hour limit', value: left, ...(r.tone === 'calm' ? {} : { color: TONE[r.tone] }) }
   })()
   const today = tiles('today', [
