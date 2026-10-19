@@ -69,14 +69,14 @@ function esc(text: string) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function svg(w: number, h: number, body: string) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" font-family="${SANS}">${body}</svg>`
+function svg(w: number, ht: number, body: string) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${ht}" viewBox="0 0 ${w} ${ht}" font-family="${SANS}">${body}</svg>`
 }
 
 /** A rounded meter: a faint track and a filled share of it. */
-function meterSvg(w: number, h: number, share: number, color: string) {
-  const fill = Math.max(share > 0 ? h : 0, Math.min(1, share) * w)
-  return svg(w, h, `<rect width="${w}" height="${h}" rx="${h / 2}" fill="${FAINT}" opacity="0.16"/><rect width="${fill.toFixed(1)}" height="${h}" rx="${h / 2}" fill="${color}"/>`)
+function meterSvg(w: number, ht: number, share: number, color: string) {
+  const fill = Math.max(share > 0 ? ht : 0, Math.min(1, share) * w)
+  return svg(w, ht, `<rect width="${w}" height="${ht}" rx="${ht / 2}" fill="${FAINT}" opacity="0.16"/><rect width="${fill.toFixed(1)}" height="${ht}" rx="${ht / 2}" fill="${color}"/>`)
 }
 
 function glyphMeter(share: number, cells: number) {
@@ -279,8 +279,8 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
       for (const f of [0.5, 1]) bars += `<line x1="0" y1="${(base - f * (base - 12)).toFixed(1)}" x2="${W}" y2="${(base - f * (base - 12)).toFixed(1)}" stroke="${FAINT}" stroke-opacity="0.15" stroke-dasharray="2 3"/>`
       bars += `<line x1="0" y1="${base + 0.5}" x2="${W}" y2="${base + 0.5}" stroke="${FAINT}" stroke-opacity="0.4"/>`
       recent.forEach((t, i) => {
-        const h = Math.max(2, (t.usd / top) * (base - 12))
-        bars += `<rect x="${(i * bw + 1.5).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${Math.max(1.5, bw - 3).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colorOf(t)}" opacity="${t.isCold || t.agentShare >= 0.5 ? 1 : 0.75}"/>`
+        const barH = Math.max(2, (t.usd / top) * (base - 12))
+        bars += `<rect x="${(i * bw + 1.5).toFixed(1)}" y="${(base - barH).toFixed(1)}" width="${Math.max(1.5, bw - 3).toFixed(1)}" height="${barH.toFixed(1)}" rx="2" fill="${colorOf(t)}" opacity="${t.isCold || t.agentShare >= 0.5 ? 1 : 0.75}"/>`
       })
       bars += `<text x="${W}" y="9" font-size="10" fill="${FAINT}" text-anchor="end">${esc(money(top))}</text>`
       if (recent.length > 1) bars += `<text x="0" y="${H - 2}" font-size="10" fill="${FAINT}">first</text><text x="${Math.min(W, recent.length * bw)}" y="${H - 2}" font-size="10" fill="${FAINT}" text-anchor="end">latest</text>`
@@ -411,7 +411,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
       weekly.forEach((i, n) => body.push(card('w' + n, i)))
     }
     body.push(caption('gh', 'Good habits'))
-    HABITS.forEach((h, n) => body.push(note('g' + n, h, INK.cobalt)))
+    HABITS.forEach((tip, n) => body.push(note('g' + n, tip, INK.cobalt)))
   }
 
   // ---------- Footer: cache and usage limits at a glance ----------
