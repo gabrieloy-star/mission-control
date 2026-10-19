@@ -98,7 +98,8 @@ function cacheState(left: number, warn: number) {
   return left <= 0 ? 'hot' : left < warn ? 'warn' : 'calm'
 }
 
-function cacheSvg(left: number, ttl: number, warn: number): string {
+/** `lead`: idle compact runs this long before the cache expires; a small tick marks the spot. */
+function cacheSvg(left: number, ttl: number, warn: number, lead: number | null = null): string {
   const W = 52, H = 12
   const color = TONE[cacheState(left, warn)]!
   const x = Math.max(4, Math.min(1, left / ttl) * (W - 8) + 4)
@@ -108,7 +109,10 @@ function cacheSvg(left: number, ttl: number, warn: number): string {
   }
   const rope = `<path d="M1 6 C ${x * 0.35} 2.5, ${x * 0.65} 9.5, ${x} 6" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`
   const spark = `<circle cx="${x}" cy="6" r="4.5" fill="${color}" opacity="0.25"/><circle cx="${x}" cy="6" r="2.2" fill="${color}"/>`
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${burnt}${rope}${spark}</svg>`
+  const tick = lead !== null && lead > 0 && lead < left
+    ? `<line x1="${(lead / ttl) * (W - 8) + 4}" y1="1.5" x2="${(lead / ttl) * (W - 8) + 4}" y2="10.5" stroke="${INK.cobalt}" stroke-width="1.6" stroke-linecap="round"/>`
+    : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${burnt}${tick}${rope}${spark}</svg>`
 }
 
 const SPANS: Record<string, number> = { five_hour: 5 * HOUR, seven_day: 7 * 24 * HOUR }
@@ -207,7 +211,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
         name: 'Prompt cache', now: left > 0 ? `valid until ${clockOf(cacheEnd(live)!)}` : 'expired', tone: state as Tone,
         what: left > 0
           ? [`A ${ttl >= HOUR ? '1-hour' : '5-minute'} cache: while it lasts, each message reads the context at a fraction of the price`, 'After it expires, the next message pays full price to send it all again',
-            s.idleAt && s.idleAt > now ? `If you send nothing, Usage Coach compacts at ${clockOf(s.idleAt)}` : 'Idle compact: off for this session (small conversation or short cache)']
+            s.idleAt && s.idleAt > now ? `If you send nothing, Usage Coach compacts at ${clockOf(s.idleAt)} (the blue tick)` : 'Idle compact: off for this session (small conversation or short cache)']
           : ['The next message pays full price to send the whole context again'],
         todo: state === 'hot' ? 'compact before your next message (press c), or start a new session'
           : state === 'warn' ? `send your next message before ${clockOf(cacheEnd(live)!)}, or compact (press c) before a break`
@@ -215,7 +219,7 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
       }),
       draw: () => {
         const out: unknown[] = []
-        if (desktop) out.push(Svg({ key: 'g', source: cacheSvg(left, ttl, warn), width: 52, height: 12, alt: `Prompt cache: ${value} left` }))
+        if (desktop) out.push(Svg({ key: 'g', source: cacheSvg(left, ttl, warn, s.idleAt ? cacheEnd(live)! - s.idleAt : null), width: 52, height: 12, alt: `Prompt cache: ${value} left` }))
         else {
           const r = left <= 0 ? 0 : Math.max(1, Math.min(6, Math.round((left / ttl) * 6)))
           const glyph = left <= 0 ? '✕' + '┄'.repeat(6) : '━'.repeat(r - 1) + '✦' + '┄'.repeat(7 - r)
