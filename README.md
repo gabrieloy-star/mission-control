@@ -8,7 +8,7 @@ Usage Coach is a Claude Code mod. It adds a strip above the prompt and a side pa
 
 ![The side pane](docs/img/pane-suggestions.png)
 
-Screenshots use demo data. The full overview is in `docs/overview.html`.
+Screenshots use demo data. The hover cards are under [Hover cards](#hover-cards).
 
 ## Why
 
@@ -33,6 +33,14 @@ One line that fits the width of the prompt. When space runs short, the least imp
 | **Suggestion** | The single change that saves the most right now, such as compacting before the cache expires. A button runs it. Only savings of $1 or more over an hour of work are suggested; otherwise it says "✓ all good". When Claude fails the same step three times in a row, that comes first, with what it cost since the first failure. |
 | **insights** | Opens the Insights tab. The number is how many insights this session has. |
 | **details** | Hover for a status card: session time, model and cost, both usage limits with their reset times, and your Fable use over 7 days. Click it to open the side pane. |
+
+### Hover cards
+
+| Context | Prompt cache |
+| --- | --- |
+| ![Context card](docs/img/tip-context.png) | ![Prompt cache card](docs/img/tip-cache.png) |
+| **Usage limits** | **Status** |
+| ![Usage limits card](docs/img/tip-limit.png) | ![Status card](docs/img/tip-status.png) |
 
 ## The side pane
 
@@ -122,6 +130,11 @@ Both compactions go through Claude Code itself, on your own account, like typing
 
 - The `/usage-coach` command, answered locally (it opens the pane and costs no tokens). Its `command.run` hook matches only `/usage-coach`; every other command passes through untouched.
 
+## Requirements
+
+- Claude Code with mods (plugins with a hooks module), in the terminal, the desktop app or VS Code. Hover cards show on the desktop app.
+- Node.js, for the History tab and the weekly part of Insights. Without it, everything else works.
+
 ## Install
 
 In Claude Code:
@@ -134,6 +147,17 @@ In Claude Code:
 Then start a new session.
 
 To remove it: `/plugin uninstall usage-coach@gabriel-mods`.
+
+## Troubleshooting
+
+- **The strip does not show.** Start a new session after installing. After an update, run `/reload-plugins`.
+- **History is empty.** Check that `node --version` works in a terminal, then press **Reload history** in the pane.
+- **The cost differs from my bill.** Costs are at API list prices. On a Pro or Max plan you pay the plan, not these figures; they show where the usage goes.
+- **Something else.** Open an [issue](https://github.com/gabrieloy-star/usage-coach/issues) with your Claude Code version (`claude --version`).
+
+## Changes
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Credits
 

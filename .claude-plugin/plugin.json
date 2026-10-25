@@ -1,8 +1,18 @@
 {
   "name": "usage-coach",
-  "version": "1.0.0",
-  "description": "Usage Coach: one strip above the prompt (context, prompt cache, usage limits, session cost) that ends with the suggestion that saves the most right now, a side pane with the details, and insights on model fit and good habits. Reads only figures Claude already reports: it costs no tokens to watch.",
+  "version": "1.1.0",
+  "description": "A strip above the prompt with context, prompt cache, usage limits and cost, plus the one change that saves the most now. Costs no tokens to watch.",
   "license": "MIT",
+  "keywords": [
+    "usage",
+    "cost",
+    "tokens",
+    "context",
+    "prompt-cache",
+    "compact",
+    "usage-limits",
+    "budget"
+  ],
   "icon": "./.claude-plugin/icon.png",
   "repository": "https://github.com/gabrieloy-star/usage-coach",
   "homepage": "https://github.com/gabrieloy-star/usage-coach",
@@ -12,7 +22,8 @@
   "termsOfServiceUrl": "https://github.com/gabrieloy-star/usage-coach/blob/main/TERMS.md",
   "types": "./types/index.d.ts",
   "author": {
-    "name": "Gabriel"
+    "name": "Gabriel",
+    "url": "https://github.com/gabrieloy-star"
   },
   "userConfig": {
     "budget": {
