@@ -26,7 +26,7 @@ One line that fits the width of the prompt. When space runs short, the least imp
 
 | Part | What it shows |
 | --- | --- |
-| **Context** | Tokens in context against the model's context window, with a mark at 85%, where compacting pays off. |
+| **Context** | Tokens in context against the model's context window, with a red line at the context ceiling (500k by default) or at 85% of the window, whichever comes first. Past it, the suggestion is to compact. |
 | **Prompt cache** | Time left before the prompt cache expires: 1 hour normally, 5 minutes when Claude writes the short cache. Turns amber, then red. |
 | **Usage limits · 5 hours / 7 days** | How much of each limit is left, against the time left in the window. At the current pace it also says when the limit runs out, and warns once when that comes before it resets. |
 | **Session cost** | What this session has cost so far at API list prices, and what the last message added. |
@@ -46,7 +46,7 @@ Open it with `/usage-coach` or the **details** button. Every tab opens on three 
   - a notice when the session passes your budget.
 
   **Compact now** always works: while Claude is answering, the compaction is queued and runs as soon as the answer ends, and the strip shows "compaction queued" until then.
-- **Context.** What every message sends, by Claude's own categories (as `/context` shows them): messages, system prompt, system tools, MCP tools, memory files, skills. A line marks 85% of the context window.
+- **Context.** What every message sends, by Claude's own categories (as `/context` shows them): messages, system prompt, system tools, MCP tools, memory files, skills. A red line marks the context ceiling (500k by default), or 85% of the window when that comes first.
 - **Session.** The cost of each message, then the cost of each task: every request of yours with its first words, how many messages and tool calls it took, and which was the most expensive. Plus which subagents ran and the largest tool outputs.
 - **History.** The last 7 days across all your projects:
   - tokens and their cost at list prices;
@@ -89,6 +89,7 @@ Change these with `/plugin configure usage-coach@gabriel-mods`.
 | --- | --- | --- |
 | Session budget | $100 | One notice when a session passes this amount in US dollars. 0 turns it off. |
 | Smallest saving worth suggesting | $1 | Suggestions that save less over an hour of work are not shown. |
+| Context ceiling | 500k | Past this many tokens of context, compacting is always suggested, and the red line sits there. Long contexts cost more per message and Claude can lose details in them. 0 keeps the line at 85% of the window. |
 | Idle compact: minutes before the cache expires | 5 | When idle compact runs. 0 turns it off. |
 | Smallest conversation worth compacting | 40,000 tokens | Below this, idle compact does nothing. |
 | Cost line after each answer | off | A dim line under each answer with its figures. The Session tab already has them. |

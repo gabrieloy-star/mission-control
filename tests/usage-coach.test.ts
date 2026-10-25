@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Live } from '../types'
-import { HOUR, MINUTE, cacheLeft, suggestionsOf, tipOf, whenOf } from '../hooks/suggestions'
+import { CEILING, HOUR, MINUTE, cacheLeft, contextTone, markOf, suggestionsOf, tipOf, whenOf } from '../hooks/suggestions'
 import { compactUsd, priceOf, rewriteUsd } from '../hooks/prices'
 import { drawStrip, familyWeek, statusCard } from '../hooks/strip'
 import { drawPane } from '../hooks/pane'
@@ -353,4 +353,33 @@ test('the weekly limit forecasts from the average since the week began, with the
   expect(whenOf(NOW + 10 * MINUTE, NOW)).toMatch(/^today \d\d:\d\d$/)
   expect(whenOf(NOW + 24 * HOUR, NOW)).toMatch(/^tomorrow /)
   expect(whenOf(NOW + 3 * 24 * HOUR, NOW)).toMatch(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) /)
+})
+
+test('past the 500k ceiling compacting comes first, whatever the saving', () => {
+  const S = { ...SETTINGS, minSaving: 1_000, ceiling: CEILING }
+  const over = live({ tokens: 620_000, conversation: 570_000 })
+  const first = suggestionsOf(over, NOW, S)[0]
+  expect(first?.id).toBe('ceiling')
+  expect(first?.title).toBe('Context over 500k: compact')
+  expect(first?.key).toBe('c')
+  // The ceiling replaces the plain large-context suggestion: one compact, not two.
+  expect(suggestionsOf(over, NOW, { ...S, minSaving: 0 }).filter(m => m.id === 'heavy')).toEqual([])
+  // Under the ceiling, or with it off, nothing new.
+  expect(suggestionsOf(live({ tokens: 480_000, conversation: 430_000 }), NOW, S).map(m => m.id)).not.toContain('ceiling')
+  expect(suggestionsOf(over, NOW, { ...S, ceiling: 0 }).map(m => m.id)).not.toContain('ceiling')
+  // An expired cache keeps its own advice: start fresh.
+  expect(suggestionsOf(live({ tokens: 620_000, conversation: 570_000, cacheAt: NOW - 2 * HOUR }), NOW, S).map(m => m.id)).not.toContain('ceiling')
+})
+
+test('the red line sits at the ceiling when it comes before 85% of the window', () => {
+  expect(markOf(1_000_000, 500_000)).toEqual({ tokens: 500_000, share: 0.5, label: '500k' })
+  expect(markOf(200_000, 500_000).label).toBe('85%')
+  expect(markOf(1_000_000, 0).label).toBe('85%')
+  expect(contextTone(520_000, 1_000_000, 500_000)).toBe('hot')
+  expect(contextTone(380_000, 1_000_000, 500_000)).toBe('warn')
+  expect(contextTone(200_000, 1_000_000, 500_000)).toBe('calm')
+  const l = live({ tokens: 520_000, conversation: 470_000 })
+  const tree = JSON.stringify(drawStrip(el, { live: l, week: null, suggestion: undefined, insights: 0, now: NOW, columns: 200, desktop: true, ceiling: 500_000, onSuggestion() {}, onOpen() {}, onInsights() {} }))
+  expect(tree).toContain('red line: 500k')
+  expect(tree).toContain('ACT NOW')
 })

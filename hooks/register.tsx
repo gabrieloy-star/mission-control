@@ -10,7 +10,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Category, Live, Saving, SavingRun, Tab, Tokens, Turn, Week, Weight } from '../types'
-import { CACHE_TTL, HOUR, LOOP_AT, MINUTE, cacheEnd, clockOf, conversationOf, money, suggestionsOf, seconds, span, tipOf, tok, ttlOf, whenOf } from './suggestions'
+import { CACHE_TTL, CEILING, HOUR, LOOP_AT, MINUTE, cacheEnd, clockOf, conversationOf, money, suggestionsOf, seconds, span, tipOf, tok, ttlOf, whenOf } from './suggestions'
 import type { Settings } from './suggestions'
 import { compactUsd, readUsd, rewriteUsd, sumTokens, tokensUsd } from './prices'
 import { SAVINGS_KEY, limitName, loopStep, paceOf, paceWords, promptLine, recordSaving, sampleLimit, savedThisWeek, stepOf, todayUsd } from './signals'
@@ -75,6 +75,7 @@ function settingsOf(options: Record<string, unknown> | undefined): Settings & { 
     budget: typeof o.budget === 'number' && o.budget > 0 ? o.budget : 0,
     minTokens: typeof o.minTokens === 'number' && o.minTokens >= 0 ? o.minTokens : 40_000,
     minSaving: typeof o.minSaving === 'number' && o.minSaving >= 0 ? o.minSaving : 1,
+    ceiling: typeof o.contextCeiling === 'number' && o.contextCeiling >= 0 ? o.contextCeiling : CEILING,
     leadMs: (typeof o.minutesBeforeExpiry === 'number' && o.minutesBeforeExpiry >= 0 ? o.minutesBeforeExpiry : 5) * MINUTE,
     telemetry: o.telemetry === true,
   }
@@ -637,6 +638,7 @@ export const register: Register = (on, options) => {
       onSuggestion: () => void compactFromStrip($),
       isQueued: isCompactQueued,
       idleAt: idleAtOf(l),
+      ceiling: s.ceiling,
       onOpen: () => void togglePane($),
       onInsights: () => void openInsights($),
       isWelcome: await read($, isWelcome),
@@ -662,6 +664,7 @@ export const register: Register = (on, options) => {
       week: await read($, week),
       saved: await read($, saved),
       today: todayUsd(await read($, week), l.usd),
+      ceiling: s.ceiling,
       weekBusy: await read($, weekBusy),
       columns: e.props.bodyColumns,
       now,

@@ -5,7 +5,7 @@
 // as SVG; the terminal draws the same in glyphs.
 
 import type { Category, Live, Tab, Week } from '../types'
-import { cacheLeft, cacheWarnAt, clockOf, money, seconds, span, tok, whenOf } from './suggestions'
+import { cacheLeft, cacheWarnAt, clockOf, contextTone, markOf, money, seconds, span, tok, whenOf } from './suggestions'
 import type { Suggestion } from './suggestions'
 import { INK, MARK, limitOf } from './strip'
 import { paceOf, tasksOf, trendOf } from './signals'
@@ -29,6 +29,8 @@ export type PaneInput = {
   saved?: { usd: number; count: number }
   /** Today's cost across sessions; null until History has read them. */
   today?: number | null
+  /** Tokens of context past which compacting is suggested: where the red line sits. */
+  ceiling?: number
 }
 
 export type PaneActions = {
@@ -219,12 +221,14 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
     const cats = p.categories.map(c => ({ name: c.name, tokens: c.tokens }))
     const onBoard = live.tokens ?? cats.reduce((n, c) => n + c.tokens, 0)
     const pct = Math.round((onBoard / window) * 100)
+    const mark = markOf(live.window, p.ceiling)
+    const tone = contextTone(onBoard, live.window, p.ceiling)
     body = [tiles('k', [
-      { label: 'In context', value: `${tok(onBoard)} · ${pct}%`, color: pct >= 85 ? INK.coral : pct >= 60 ? INK.amber : undefined },
+      { label: 'In context', value: `${tok(onBoard)} · ${pct}%`, color: tone === 'hot' ? INK.coral : tone === 'warn' ? INK.amber : undefined },
       { label: 'Context window', value: tok(window) },
       { label: 'Per message', value: live.fixed === null ? '–' : money(readUsd(onBoard, live.model)) },
     ])]
-    body.push(caption('ch', 'What every message sends', 'red line: 85%'))
+    body.push(caption('ch', 'What every message sends', `red line: ${mark.label}`))
     if (desktop) {
       const H = 22
       let x = 0
@@ -236,7 +240,7 @@ export function drawPane(el: any, p: PaneInput, act: PaneActions) {
         rects += `<rect x="${x.toFixed(1)}" y="3" width="${Math.max(1, w - 1.5).toFixed(1)}" height="${H - 6}" fill="${SHADES[c.name] ?? FAINT}"/>`
         x += w
       }
-      rects += `</g><line x1="${0.85 * W}" y1="0" x2="${0.85 * W}" y2="${H}" stroke="${INK.coral}" stroke-width="2" stroke-linecap="round"/>`
+      rects += `</g><line x1="${mark.share * W}" y1="0" x2="${mark.share * W}" y2="${H}" stroke="${INK.coral}" stroke-width="2" stroke-linecap="round"/>`
       body.push(Svg({ key: 'bar', alt: `Context ${pct}% of the window`, width: W, height: H, source: svg(W, H, rects) }))
     } else {
       body.push(Text({ key: 'bar', color: INK.cobalt, children: glyphMeter(onBoard / window, cols - 1) }))

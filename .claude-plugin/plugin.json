@@ -28,6 +28,13 @@
       "default": 1,
       "min": 0
     },
+    "contextCeiling": {
+      "type": "number",
+      "title": "Context ceiling",
+      "description": "Past this many tokens of context, Usage Coach suggests compacting and draws the red line there. 0 keeps the line at 85% of the context window.",
+      "default": 500000,
+      "min": 0
+    },
     "minutesBeforeExpiry": {
       "type": "number",
       "title": "Idle compact: minutes before the cache expires",

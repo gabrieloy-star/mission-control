@@ -13,6 +13,10 @@ export const CACHE_TTL = HOUR
 export const HEAVY_AT = 200_000
 /** From here, after the cache expired, starting over with a note beats resending. */
 export const FRESH_AT = 300_000
+/** Past this much context, compacting is suggested whatever the window: the default ceiling. */
+export const CEILING = 500_000
+/** Without a lower ceiling, the context mark sits at this share of the window. */
+const WINDOW_MARK = 0.85
 /** Failures in a row on the same step that make Claude's loop the first thing to fix. */
 export const LOOP_AT = 3
 /** Ranking only: requests in an hour of steady work. */
@@ -23,6 +27,8 @@ export type Settings = {
   budget: number
   /** Smallest saving worth suggesting, in dollars over an hour of work. */
   minSaving: number
+  /** Tokens of context past which compacting is always suggested; 0 leaves only the 85% mark. */
+  ceiling?: number
 }
 
 export type Suggestion = {
@@ -125,6 +131,24 @@ function lastAgent(weights: Weight[]): Weight | undefined {
   return undefined
 }
 
+// ---------- The context mark ----------
+
+/** Where the context gauge draws its red line: the ceiling, or 85% of the window when that comes first. */
+export function markOf(window: number | null | undefined, ceiling: number | undefined): { tokens: number; share: number; label: string } {
+  const w = window || 0
+  const atWindow = w * WINDOW_MARK
+  if (ceiling && ceiling > 0 && (w === 0 || ceiling < atWindow)) return { tokens: ceiling, share: w ? ceiling / w : WINDOW_MARK, label: tok(ceiling) }
+  return { tokens: atWindow, share: WINDOW_MARK, label: '85%' }
+}
+
+/** The context's state against the mark: red past it, amber from 70% of the way there. */
+export function contextTone(tokens: number | null | undefined, window: number | null | undefined, ceiling: number | undefined): 'calm' | 'warn' | 'hot' {
+  const mark = markOf(window, ceiling).tokens
+  const t = tokens ?? 0
+  if (mark <= 0) return 'calm'
+  return t >= mark ? 'hot' : t >= mark * 0.7 ? 'warn' : 'calm'
+}
+
 // ---------- The rules ----------
 
 export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[] {
@@ -180,8 +204,21 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
     })
   }
 
-  // 3. A large context: every message sends all of it.
-  if (left !== null && left > 0 && tokens >= HEAVY_AT && conv > SUMMARY_TOKENS * 2) {
+  // 3. Past the context ceiling: always worth compacting, whatever the saving.
+  const ceiling = s.ceiling ?? 0
+  const isOver = ceiling > 0 && tokens >= ceiling && conv > SUMMARY_TOKENS * 2 && !(left !== null && left <= 0)
+  if (isOver) {
+    const usd = readUsd(conv - SUMMARY_TOKENS, model)
+    out.push({
+      id: 'ceiling', tone: 'hot', unit: 'per message', usd, score: usd * CALLS_PER_HOUR, key: 'c',
+      title: `Context over ${tok(ceiling)}: compact`,
+      short: `over ${tok(ceiling)} · compact`,
+      how: `The context is ${tok(tokens)} tokens, past your ${tok(ceiling)} ceiling. Every message sends all of it, and the longer it gets the more details Claude can lose. Compacting brings it to about ${tok((live.fixed ?? 0) + SUMMARY_TOKENS)}: ${money(usd)} less per message. Click compact, or type /compact. For an unrelated task, type /clear.`,
+    })
+  }
+
+  // 4. A large context: every message sends all of it.
+  if (!isOver && left !== null && left > 0 && tokens >= HEAVY_AT && conv > SUMMARY_TOKENS * 2) {
     const usd = readUsd(conv - SUMMARY_TOKENS, model)
     out.push({
       id: 'heavy', tone: 'warn', unit: 'per message', usd, score: usd * CALLS_PER_HOUR, key: 'c',
@@ -191,7 +228,7 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
     })
   }
 
-  // 4. MCP servers whose tools are sent with every message but never used.
+  // 5. MCP servers whose tools are sent with every message but never used.
   const idle = idleServers(live)
   const idleTokens = idle.reduce((n, sv) => n + sv.tokens, 0)
   if (idleTokens >= 3_000 && live.turns.length >= 3) {
@@ -205,7 +242,7 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
     })
   }
 
-  // 5. A general-purpose subagent spent heavily.
+  // 6. A general-purpose subagent spent heavily.
   const agent = lastAgent(live.weights)
   if (agent && agent.agentType === 'general-purpose' && agent.tokens >= 5_000_000 && agent.usd) {
     const usd = agent.usd * 0.7
@@ -217,7 +254,7 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
     })
   }
 
-  // 6. A large tool output is now sent with every message.
+  // 7. A large tool output is now sent with every message.
   const last = live.weights[live.weights.length - 1]
   if (last && !last.isAgent && last.tokens >= 10_000) {
     const usd = readUsd(last.tokens, model) * 10
@@ -229,7 +266,7 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
     })
   }
 
-  // 7. Over budget: said once by a toast; listed here while it holds.
+  // 8. Over budget: said once by a toast; listed here while it holds.
   if (s.budget > 0 && live.usd !== null && live.usd >= s.budget) {
     out.push({
       id: 'budget', tone: 'hot', unit: 'now', usd: 0, score: 0,
@@ -240,10 +277,10 @@ export function suggestionsOf(live: Live, now: number, s: Settings): Suggestion[
   }
 
   // Small savings are noise: only what saves at least `minSaving` over an hour of work.
-  // A failing loop and the budget carry no saving of their own; the loop always comes first.
-  const first = (m: Suggestion) => (m.id === 'loop' ? 1 : 0)
+  // A failing loop and the budget carry no saving of their own; the loop always comes first, then the ceiling.
+  const first = (m: Suggestion) => (m.id === 'loop' ? 2 : m.id === 'ceiling' ? 1 : 0)
   return out
-    .filter(m => m.id === 'loop' || m.id === 'budget' || m.score >= s.minSaving)
+    .filter(m => m.id === 'loop' || m.id === 'budget' || m.id === 'ceiling' || m.score >= s.minSaving)
     .sort((a, b) => first(b) - first(a) || b.score - a.score)
 }
 

@@ -101,7 +101,7 @@ pre { margin: 0; background: var(--bg-2); border: 1px solid var(--line); border-
       <h2>Five readings and a suggestion</h2>
     </div>
     <div class="anatomy">
-      <div class="part"><span class="nm cobalt">Context</span><p>What every message sends, against the model's context window. Grey is instructions, tools and memory, blue your conversation, a red line at 85% marks where compacting pays off.</p></div>
+      <div class="part"><span class="nm cobalt">Context</span><p>What every message sends, against the model's context window. Grey is instructions, tools and memory, blue your conversation, a red line at 500k (or 85% of a smaller window) marks where to compact.</p></div>
       <div class="part"><span class="nm mint">Prompt cache</span><p>Time left before the prompt cache expires. While it lasts, each message reads the context at a fraction of the price. After it expires, the next message pays to send it all again.</p></div>
       <div class="part"><span class="nm amber">Usage limits</span><p>Usage left in the 5-hour and weekly limits, against the time left. At the current pace it says when each one runs out, and warns when that comes before it resets.</p></div>
       <div class="part"><span class="nm">Session cost</span><p>What the session has cost so far at list prices, what the last message added, and what the last task cost.</p></div>
@@ -152,7 +152,7 @@ pre { margin: 0; background: var(--bg-2); border: 1px solid var(--line); border-
     <div class="card">
       <span class="tag">Settings</span>
       <h2>Yours to tune</h2>
-      <p>Session budget ($100), the smallest saving worth suggesting ($1), when idle compact runs (5 min before the cache expires, 0 turns it off) and the smallest conversation worth compacting (40k tokens). All in the plugin's settings.</p>
+      <p>Session budget ($100), the smallest saving worth suggesting ($1), the context ceiling (500k), when idle compact runs (5 min before the cache expires, 0 turns it off) and the smallest conversation worth compacting (40k tokens). All in the plugin's settings.</p>
     </div>
   </section>
 

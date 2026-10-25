@@ -5,7 +5,7 @@
 // terminal draws them with glyphs.
 
 import type { Limit, Live, Week } from '../types'
-import { HEAVY_AT, HOUR, cacheEnd, cacheLeft, cacheWarnAt, clockOf, money, savingOf, span, tok, ttlOf, whenOf } from './suggestions'
+import { HEAVY_AT, HOUR, cacheEnd, cacheLeft, cacheWarnAt, clockOf, contextTone, markOf, money, savingOf, span, tok, ttlOf, whenOf } from './suggestions'
 import type { Suggestion } from './suggestions'
 import { sumTokens, tokensUsd } from './prices'
 import { paceOf, paceWords, tasksOf } from './signals'
@@ -59,17 +59,19 @@ export type StripInput = {
   /** First session after install: a short welcome above the strip until "got it". */
   isWelcome?: boolean
   onWelcomeDone?: () => void
+  /** Tokens of context past which compacting is suggested: where the red line sits. */
+  ceiling?: number
 }
 
 // ---------- Gauges ----------
 
-/** The context gauge's scale: the window compaction is measured against; the mark at 85% of it. */
-function contextScale(live: Live) {
-  return { scale: live.window || HEAVY_AT, notch: 0.85 }
+/** The context gauge's scale: the window; the mark at the ceiling, or 85% of the window. */
+function contextScale(live: Live, ceiling: number | undefined) {
+  return { scale: live.window || HEAVY_AT, notch: markOf(live.window, ceiling).share }
 }
 
-function contextCells(live: Live, cells: number) {
-  const { scale, notch } = contextScale(live)
+function contextCells(live: Live, cells: number, ceiling: number | undefined) {
+  const { scale, notch } = contextScale(live, ceiling)
   const tokens = Math.min(live.tokens ?? 0, scale)
   const fixed = Math.min(live.fixed ?? 0, tokens)
   const add = Math.min(live.adds[live.adds.length - 1] ?? 0, tokens - fixed)
@@ -79,9 +81,9 @@ function contextCells(live: Live, cells: number) {
   return { f, used, fresh: Math.min(fresh, used - f), notchAt: Math.round(notch * cells) }
 }
 
-function contextSvg(live: Live): string {
+function contextSvg(live: Live, ceiling: number | undefined): string {
   const n = 24, w = 3, g = 1, h = 12
-  const c = contextCells(live, n)
+  const c = contextCells(live, n, ceiling)
   let rects = ''
   for (let i = 0; i < n; i++) {
     const fill = i < c.f ? INK.grey : i < c.used ? INK.cobalt : INK.grey
@@ -164,25 +166,26 @@ export function drawStrip(el: any, s: StripInput): unknown | null {
       key: 'context', rank: 1, cells: gauge + 1 + value.length + (addText ? 1 + addText.length : 0),
       tip: (() => {
         const pct = Math.round(((live.tokens ?? 0) / (live.window || 1)) * 100)
-        const tone: Tone = pct >= 85 ? 'hot' : pct >= 60 ? 'warn' : 'calm'
+        const mark = markOf(live.window, s.ceiling)
+        const tone: Tone = contextTone(live.tokens, live.window, s.ceiling)
         return tipText({
           name: 'Context', now: `${value} of ${tok(live.window)} (${pct}%)`, tone,
           what: [
             'Everything Claude sends with every message',
             live.fixed !== null ? `Grey: ${tok(live.fixed)} of instructions, tools and memory` : '',
-            'Blue: your conversation · red line: 85%',
+            `Blue: your conversation · red line: ${mark.label}`,
             addText ? `${addText}: what your last message added (its reply, tool outputs and files read)` : '',
           ],
-          todo: tone === 'hot' ? 'compact (click compact), or start a new session for the next task'
+          todo: tone === 'hot' ? `compact (click compact): past ${mark.label} every message costs more and Claude can lose details`
             : tone === 'warn' ? 'type /clear before an unrelated task'
             : 'nothing',
         })
       })(),
       draw: () => {
         const out: unknown[] = []
-        if (desktop) out.push(Svg({ key: 'g', source: contextSvg(live), width: 95, height: 12, alt: `Context: ${value} of ${tok(live.window)}` }))
+        if (desktop) out.push(Svg({ key: 'g', source: contextSvg(live, s.ceiling), width: 95, height: 12, alt: `Context: ${value} of ${tok(live.window)}` }))
         else {
-          const c = contextCells(live, 12)
+          const c = contextCells(live, 12, s.ceiling)
           const glyphs: unknown[] = []
           for (let i = 0; i < 12; i++) {
             if (i === c.notchAt) glyphs.push(Text({ key: 'n', color: INK.coral, children: '│' }))
