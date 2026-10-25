@@ -76,6 +76,12 @@ Open it with `/usage-coach` or the **details** button. Every tab opens on three 
 
   A model that does not fit the work is also said once per session in a notice. Insights are local rules over the same figures: they cost no tokens.
 
+| Context | Session |
+| --- | --- |
+| ![Context tab](docs/img/pane-context.png) | ![Session tab](docs/img/pane-session.png) |
+| **History** | **Insights** |
+| ![History tab](docs/img/pane-history.png) | ![Insights tab](docs/img/pane-insights.png) |
+
 ## Idle compact
 
 If you leave a large session idle, Usage Coach compacts it 5 minutes before the 1-hour prompt cache expires. Coming back then costs a short summary instead of sending the whole conversation again. Small conversations are left alone, and so is a session on the 5-minute cache, which leaves no time to act.

@@ -4,8 +4,8 @@
 
 - A context ceiling, 500k tokens by default: past it, compacting is always the first suggestion, and the red line on the context gauge sits there. Change it with the "Context ceiling" setting; 0 keeps the line at 85% of the window.
 - The listing icon is the gauge again.
-- Keywords, an author link and a shorter description in the plugin manifest.
-- README: requirements, troubleshooting and the hover-card screenshots.
+- A display name, keywords, an author link and a shorter description in the plugin manifest.
+- README: requirements, troubleshooting, and screenshots of the hover cards and every pane tab.
 
 ## 1.0.0
 

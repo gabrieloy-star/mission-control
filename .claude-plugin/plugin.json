@@ -1,5 +1,6 @@
 {
   "name": "usage-coach",
+  "displayName": "Usage Coach",
   "version": "1.1.0",
   "description": "A strip above the prompt with context, prompt cache, usage limits and cost, plus the one change that saves the most now. Costs no tokens to watch.",
   "license": "MIT",
