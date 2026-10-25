@@ -64,7 +64,7 @@ export type Weight = {
 
 /** What the strip and the pane draw from. Plain data: the host keeps it across reloads. */
 export type Live = {
-  /** When the session began, in `$.clock.now()` milliseconds: the flight's T+0. */
+  /** When the session began, in `$.clock.now()` milliseconds: the session's start. */
   startedAt: number | null
   /** Context tokens now, and the window they fill. */
   tokens: number | null
